@@ -720,11 +720,189 @@
     rafId: null,
     swirls: [],            // 活跃的旋涡效果
     particles: [],         // 粒子爆发 [{x,y,vx,vy,life,maxLife,color,size}]
-    rings: []              // 闪光环扩散 [{x,y,radius,life,maxLife,color}]
+    rings: [],             // 闪光环扩散 [{x,y,radius,life,maxLife,color}]
+    filterIndex: 0         // 魔性滤镜索引（0=关）
   };
+
+  const FILTERS = [
+    { name: 'OFF', color: '#00E5FF' },
+    { name: 'RGB SPLIT', color: '#FF3B5C' },
+    { name: 'KALEIDO', color: '#B388FF' },
+    { name: 'PIXELATE', color: '#FFD400' },
+    { name: 'INVERT', color: '#7CFC00' },
+    { name: 'WAVE', color: '#00BFFF' },
+    { name: 'HUE BOOM', color: '#FF5CA8' },
+    { name: 'CRT', color: '#FF4500' },
+    { name: 'VORTEX', color: '#9B59B6' }
+  ];
 
   const MAX_SWIRLS = 4;
   const MAX_PARTICLES = 80;
+
+  // 滤镜离屏 canvas（降分辨率处理，保证性能）
+  const filterCanvas = document.createElement('canvas');
+  const filterCtx = filterCanvas.getContext('2d');
+  const FILTER_MAX_W = 420; // 滤镜处理最大宽度（像素）
+
+  // 应用魔性滤镜（在 render 末尾对整幅画面处理）
+  function applyFilter() {
+    const idx = state.filterIndex;
+    if (idx === 0) return;
+    const W = canvas.width, H = canvas.height;
+    const dpr = window.devicePixelRatio || 1;
+    // 降分辨率处理
+    const scale = Math.min(1, FILTER_MAX_W / W);
+    const fw = Math.max(1, Math.floor(W * scale));
+    const fh = Math.max(1, Math.floor(H * scale));
+    filterCanvas.width = fw; filterCanvas.height = fh;
+    filterCtx.drawImage(canvas, 0, 0, fw, fh);
+    let img;
+    try { img = filterCtx.getImageData(0, 0, fw, fh); } catch(e) { return; }
+    const d = img.data;
+    const out = new Uint8ClampedArray(d);
+    const now = performance.now() * 0.001;
+
+    if (idx === 1) {
+      // RGB SPLIT：红蓝通道大幅错位
+      const off = Math.floor(fw * 0.06);
+      for (let y = 0; y < fh; y++) {
+        for (let x = 0; x < fw; x++) {
+          const i = (y * fw + x) * 4;
+          const rx = Math.min(fw - 1, x + off);
+          const bx = Math.max(0, x - off);
+          out[i] = d[(y * fw + rx) * 4];          // R 右移
+          out[i + 1] = d[i + 1];                    // G 不变
+          out[i + 2] = d[(y * fw + bx) * 4 + 2];   // B 左移
+        }
+      }
+    } else if (idx === 2) {
+      // KALEIDOSCOPE：6 重镜像对称
+      const cx = fw / 2, cy = fh / 2;
+      const segments = 6;
+      for (let y = 0; y < fh; y++) {
+        for (let x = 0; x < fw; x++) {
+          const dx = x - cx, dy = y - cy;
+          let a = Math.atan2(dy, dx);
+          const r = Math.sqrt(dx * dx + dy * dy);
+          const seg = (Math.PI * 2) / segments;
+          a = ((a % seg) + seg) % seg;
+          if (a > seg / 2) a = seg - a;
+          const sx = Math.floor(cx + Math.cos(a) * r);
+          const sy = Math.floor(cy + Math.sin(a) * r);
+          if (sx >= 0 && sx < fw && sy >= 0 && sy < fh) {
+            const i = (y * fw + x) * 4;
+            const s = (sy * fw + sx) * 4;
+            out[i] = d[s]; out[i + 1] = d[s + 1]; out[i + 2] = d[s + 2]; out[i + 3] = d[s + 3];
+          }
+        }
+      }
+    } else if (idx === 3) {
+      // PIXELATE：马赛克
+      const bs = Math.max(4, Math.floor(fw / 40));
+      for (let y = 0; y < fh; y += bs) {
+        for (let x = 0; x < fw; x += bs) {
+          let r = 0, g = 0, b = 0, cnt = 0;
+          for (let yy = y; yy < Math.min(fh, y + bs); yy++) {
+            for (let xx = x; xx < Math.min(fw, x + bs); xx++) {
+              const i = (yy * fw + xx) * 4;
+              r += d[i]; g += d[i + 1]; b += d[i + 2]; cnt++;
+            }
+          }
+          r = r / cnt | 0; g = g / cnt | 0; b = b / cnt | 0;
+          for (let yy = y; yy < Math.min(fh, y + bs); yy++) {
+            for (let xx = x; xx < Math.min(fw, x + bs); xx++) {
+              const i = (yy * fw + xx) * 4;
+              out[i] = r; out[i + 1] = g; out[i + 2] = b;
+            }
+          }
+        }
+      }
+    } else if (idx === 4) {
+      // INVERT：反色 + 对比度增强
+      for (let i = 0; i < d.length; i += 4) {
+        out[i] = 255 - d[i];
+        out[i + 1] = 255 - d[i + 1];
+        out[i + 2] = 255 - d[i + 2];
+      }
+    } else if (idx === 5) {
+      // WAVE：水平正弦位移
+      const amp = fw * 0.06;
+      for (let y = 0; y < fh; y++) {
+        const shift = Math.floor(Math.sin(y * 0.08 + now * 3) * amp);
+        for (let x = 0; x < fw; x++) {
+          const sx = Math.max(0, Math.min(fw - 1, x + shift));
+          const i = (y * fw + x) * 4;
+          const s = (y * fw + sx) * 4;
+          out[i] = d[s]; out[i + 1] = d[s + 1]; out[i + 2] = d[s + 2]; out[i + 3] = d[s + 3];
+        }
+      }
+    } else if (idx === 6) {
+      // HUE BOOM：色相旋转 + 饱和拉满
+      for (let i = 0; i < d.length; i += 4) {
+        const r = d[i], g = d[i + 1], b = d[i + 2];
+        const max = Math.max(r, g, b), min = Math.min(r, g, b);
+        let h, s = max === 0 ? 0 : (max - min) / max, l = (max + min) / 2 / 255;
+        if (max === min) h = 0;
+        else if (max === r) h = ((g - b) / (max - min)) % 6;
+        else if (max === g) h = (b - r) / (max - min) + 2;
+        else h = (r - g) / (max - min) + 4;
+        h = (h * 60 + now * 180) % 360; if (h < 0) h += 360;
+        s = 1; // 饱和拉满
+        const c = (1 - Math.abs(2 * l - 1)) * s;
+        const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+        const m = l - c / 2;
+        let r1, g1, b1;
+        if (h < 60) { r1 = c; g1 = x; b1 = 0; }
+        else if (h < 120) { r1 = x; g1 = c; b1 = 0; }
+        else if (h < 180) { r1 = 0; g1 = c; b1 = x; }
+        else if (h < 240) { r1 = 0; g1 = x; b1 = c; }
+        else if (h < 300) { r1 = x; g1 = 0; b1 = c; }
+        else { r1 = c; g1 = 0; b1 = x; }
+        out[i] = (r1 + m) * 255;
+        out[i + 1] = (g1 + m) * 255;
+        out[i + 2] = (b1 + m) * 255;
+      }
+    } else if (idx === 7) {
+      // CRT：扫描线 + RGB 错位 + 暗角
+      const off = Math.floor(fw * 0.04);
+      for (let y = 0; y < fh; y++) {
+        const scanline = (y % 3 === 0) ? 0.6 : 1;
+        for (let x = 0; x < fw; x++) {
+          const i = (y * fw + x) * 4;
+          const rx = Math.min(fw - 1, x + off);
+          const bx = Math.max(0, x - off);
+          out[i] = d[(y * fw + rx) * 4] * scanline;
+          out[i + 1] = d[i + 1] * scanline;
+          out[i + 2] = d[(y * fw + bx) * 4 + 2] * scanline;
+        }
+      }
+    } else if (idx === 8) {
+      // VORTEX：全屏旋涡
+      const cx = fw / 2, cy = fh / 2;
+      const maxR = Math.sqrt(cx * cx + cy * cy);
+      for (let y = 0; y < fh; y++) {
+        for (let x = 0; x < fw; x++) {
+          const dx = x - cx, dy = y - cy;
+          const r = Math.sqrt(dx * dx + dy * dy);
+          const f = 1 - r / maxR;
+          const a = Math.PI * 4 * f * f + now * 2;
+          const cos = Math.cos(a), sin = Math.sin(a);
+          const sx = Math.floor(cx + dx * cos - dy * sin);
+          const sy = Math.floor(cy + dx * sin + dy * cos);
+          if (sx >= 0 && sx < fw && sy >= 0 && sy < fh) {
+            const i = (y * fw + x) * 4;
+            const s = (sy * fw + sx) * 4;
+            out[i] = d[s]; out[i + 1] = d[s + 1]; out[i + 2] = d[s + 2]; out[i + 3] = d[s + 3];
+          }
+        }
+      }
+    }
+
+    filterCtx.putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = (idx !== 3); // 像素化时关闭平滑
+    ctx.drawImage(filterCanvas, 0, 0, W, H);
+    ctx.imageSmoothingEnabled = true;
+  }
   // 旋涡扭曲（像素级，合并所有旋涡到一次 getImageData/putImageData）
   function applySwirls() {
     if (!state.swirls.length) return;
@@ -827,7 +1005,12 @@
     }
     // 粒子 + 闪光环（所有模式都叠加）
     drawEffects(W, H);
+    // 魔性滤镜（最后整屏处理）
+    if (state.filterIndex > 0) applyFilter();
   }
+
+  // 需要持续重绘的动画滤镜
+  const ANIMATED_FILTERS = new Set([5, 6, 8]); // WAVE, HUE BOOM, VORTEX
 
   // 生成粒子爆发
   function spawnParticles(cx, cy, count, colors) {
@@ -1011,6 +1194,7 @@
   // 动画循环：有任何动画（glitch / swirls / dist）时重绘，由 loop 统一驱动，避免重复 render
   function hasAnim() {
     if (state.glitch || state.swirls.length || state.particles.length || state.rings.length) return true;
+    if (state.filterIndex > 0 && ANIMATED_FILTERS.has(state.filterIndex)) return true;
     for (const k in state.dist) if (state.dist[k] > 0.001) return true;
     return false;
   }
@@ -1246,6 +1430,19 @@
 
   document.getElementById('nextCharBtn').addEventListener('click', () => {
     setChar(state.charIdx + 1);
+  });
+
+  // FILTER：循环切换魔性滤镜
+  const filterBtn = document.getElementById('filterBtn');
+  filterBtn.addEventListener('click', () => {
+    state.filterIndex = (state.filterIndex + 1) % FILTERS.length;
+    const f = FILTERS[state.filterIndex];
+    filterBtn.textContent = f.name;
+    filterBtn.style.background = f.color;
+    showToast(`🎭 ${f.name}`);
+    AudioEngine.sfx('pop');
+    // 静态滤镜立即渲染一次
+    if (!ANIMATED_FILTERS.has(state.filterIndex)) render();
   });
 
   // UPLOAD

@@ -205,6 +205,10 @@ html, body {
 .actionBtn.yellow { background: #FFD400; color: #000; }
 .actionBtn.purple { background: #B388FF; color: #fff; }
 .actionBtn.red { background: #FF3B5C; color: #fff; }
+.actionBtn.cyan { background: #00E5FF; color: #000; }
+
+/* 三个按钮时字号略小 */
+.actionBtn:has(+ .actionBtn + .actionBtn) { font-size: 19px; }
 
 /* GLITCH 模式下隐藏普通按钮，显示 EXIT */
 #exitGlitchBtn { display: none; }
