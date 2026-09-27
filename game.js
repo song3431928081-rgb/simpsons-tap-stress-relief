@@ -181,139 +181,224 @@
      dist: { featId: 0~1 } 扭曲强度
      ============================================================ */
   const SKIN = '#FCD936', SKIN_DK = '#E8B918', OUT = '#1a1a1a';
+  // 皮肤渐变（带阴影），供所有角色复用
+  function skinGrad(ctx, W, H) {
+    const g = ctx.createLinearGradient(0, -H*0.4, 0, H*0.1);
+    g.addColorStop(0, '#FDE047');
+    g.addColorStop(1, '#D4A017');
+    return g;
+  }
 
-  // 画甜甜圈（可缩放旋转）
+  // 画甜甜圈（可缩放旋转，带糖霜滴落）
   function drawDonut(ctx, cx, cy, r, scaleX, scaleY, rot) {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(rot || 0);
     ctx.scale(scaleX || 1, scaleY || 1);
-    // 外圆（粉色糖霜）
+    // 蛋糕本体（金棕色）
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, Math.PI * 2);
-    ctx.fillStyle = '#FF7EB3';
-    ctx.fill();
-    ctx.lineWidth = r * 0.12;
-    ctx.strokeStyle = OUT;
-    ctx.stroke();
-    // 内孔
-    ctx.beginPath();
-    ctx.arc(0, 0, r * 0.32, 0, Math.PI * 2);
-    ctx.fillStyle = '#fff';
+    const cakeGrad = ctx.createRadialGradient(0, 0, r*0.2, 0, 0, r);
+    cakeGrad.addColorStop(0, '#E8A04A');
+    cakeGrad.addColorStop(1, '#B5701E');
+    ctx.fillStyle = cakeGrad;
     ctx.fill();
     ctx.lineWidth = r * 0.1;
     ctx.strokeStyle = OUT;
     ctx.stroke();
+    // 粉色糖霜（波浪边缘）
+    ctx.beginPath();
+    const frostingR = r * 0.92;
+    for (let i = 0; i <= 36; i++) {
+      const a = (i / 36) * Math.PI * 2;
+      const w = frostingR + Math.sin(a * 7) * r * 0.06 + Math.cos(a * 11) * r * 0.03;
+      const x = Math.cos(a) * w, y = Math.sin(a) * w;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    const frostGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, frostingR);
+    frostGrad.addColorStop(0, '#FFB3D9');
+    frostGrad.addColorStop(1, '#FF5CA8');
+    ctx.fillStyle = frostGrad;
+    ctx.fill();
+    // 糖霜高光
+    ctx.beginPath();
+    ctx.ellipse(-r*0.25, -r*0.3, r*0.25, r*0.12, -0.5, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fill();
+    // 内孔
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.3, 0, Math.PI * 2);
+    ctx.fillStyle = '#B5701E';
+    ctx.fill();
+    ctx.lineWidth = r * 0.08;
+    ctx.strokeStyle = OUT;
+    ctx.stroke();
+    // 糖霜滴落
+    ctx.fillStyle = '#FF7EB3';
+    [[-0.5, 0.85], [0.2, 0.9], [0.6, 0.75]].forEach(([dx, dy]) => {
+      ctx.beginPath();
+      ctx.ellipse(dx * r, dy * r, r * 0.08, r * 0.12, 0, 0, Math.PI*2);
+      ctx.fill();
+    });
     // 糖屑
-    const colors = ['#fff', '#FFD400', '#7CFC00', '#00BFFF', '#FF4500'];
-    for (let i = 0; i < 10; i++) {
-      const a = (i / 10) * Math.PI * 2;
-      const rr = r * 0.62;
+    const colors = ['#fff', '#FFD400', '#7CFC00', '#00BFFF', '#FF4500', '#9B59B6'];
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2 + Math.random() * 0.3;
+      const rr = r * (0.5 + Math.random() * 0.25);
       ctx.save();
       ctx.translate(Math.cos(a) * rr, Math.sin(a) * rr);
-      ctx.rotate(a + Math.PI / 2);
+      ctx.rotate(a + Math.random());
       ctx.fillStyle = colors[i % colors.length];
-      ctx.fillRect(-r * 0.06, -r * 0.02, r * 0.12, r * 0.04);
+      ctx.fillRect(-r * 0.05, -r * 0.018, r * 0.1, r * 0.036);
       ctx.restore();
     }
     ctx.restore();
   }
 
-  // Homer 辛普森（吃甜甜圈）
+  // Homer 辛普森（吃甜甜圈）— 精细版
   function drawHomer(ctx, W, H, dist) {
     const d = (id, def) => (dist[id] != null ? dist[id] : def || 0);
-    const donutS = 1 + d('donut', 0) * 1.6;
-    const bellyS = 1 + d('belly', 0) * 0.5;
-    const mouthS = 1 + d('mouth', 0) * 0.8;
+    const donutS = 1 + d('donut', 0) * 1.8;
+    const bellyS = 1 + d('belly', 0) * 0.55;
+    const mouthS = 1 + d('mouth', 0) * 0.9;
     const headTilt = d('head', 0) * 0.15;
 
-    // 背景云
-    ctx.fillStyle = '#B8E0F5';
-    ctx.fillRect(0, 0, W, H);
-
     ctx.save();
-    ctx.translate(W * 0.5, H * 0.62);
+    ctx.translate(W * 0.5, H * 0.6);
     ctx.rotate(headTilt);
+    ctx.strokeStyle = OUT; ctx.lineWidth = Math.max(2, W * 0.006);
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+
+    const skinGrad = () => {
+      const g = ctx.createLinearGradient(0, -H*0.4, 0, H*0.1);
+      g.addColorStop(0, '#FDE047');
+      g.addColorStop(1, '#E8B918');
+      return g;
+    };
 
     // 腿
-    ctx.fillStyle = SKIN;
-    ctx.strokeStyle = OUT; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.ellipse(-W*0.06, H*0.22, W*0.05, H*0.05, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.ellipse(W*0.06, H*0.22, W*0.05, H*0.05, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = skinGrad();
+    ctx.beginPath(); ctx.ellipse(-W*0.07, H*0.22, W*0.055, H*0.055, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(W*0.07, H*0.22, W*0.055, H*0.055, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
     // 鞋
-    ctx.fillStyle = '#222';
-    ctx.beginPath(); ctx.ellipse(-W*0.06, H*0.26, W*0.06, H*0.03, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.ellipse(W*0.06, H*0.26, W*0.06, H*0.03, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath();
+    ctx.moveTo(-W*0.13, H*0.24); ctx.lineTo(-W*0.01, H*0.24);
+    ctx.quadraticCurveTo(0, H*0.27, -W*0.02, H*0.28);
+    ctx.lineTo(-W*0.13, H*0.28); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(W*0.01, H*0.24); ctx.lineTo(W*0.13, H*0.24);
+    ctx.quadraticCurveTo(W*0.14, H*0.27, W*0.12, H*0.28);
+    ctx.lineTo(W*0.01, H*0.28); ctx.closePath(); ctx.fill(); ctx.stroke();
 
     // 蓝裤
-    ctx.fillStyle = '#3B82F6';
+    const pantsGrad = ctx.createLinearGradient(0, H*0.04, 0, H*0.22);
+    pantsGrad.addColorStop(0, '#4A90E2');
+    pantsGrad.addColorStop(1, '#2563EB');
+    ctx.fillStyle = pantsGrad;
     ctx.beginPath();
-    ctx.moveTo(-W*0.14, H*0.05);
-    ctx.lineTo(W*0.14, H*0.05);
-    ctx.lineTo(W*0.12, H*0.2);
-    ctx.lineTo(-W*0.12, H*0.2);
+    ctx.moveTo(-W*0.16, H*0.04); ctx.lineTo(W*0.16, H*0.04);
+    ctx.lineTo(W*0.13, H*0.22); ctx.lineTo(-W*0.13, H*0.22);
     ctx.closePath(); ctx.fill(); ctx.stroke();
 
     // 白衫 + 大肚子
+    const shirtGrad = ctx.createRadialGradient(0, -H*0.06, 0, 0, -H*0.02, W*0.25);
+    shirtGrad.addColorStop(0, '#ffffff');
+    shirtGrad.addColorStop(1, '#d8d8d8');
+    ctx.fillStyle = shirtGrad;
+    ctx.beginPath();
+    ctx.ellipse(0, -H*0.02, W*0.24 * bellyS, H*0.17 * bellyS, 0, 0, Math.PI*2);
+    ctx.fill(); ctx.stroke();
+    // 衬衫领子
     ctx.fillStyle = '#fff';
     ctx.beginPath();
-    ctx.ellipse(0, -H*0.02, W*0.22 * bellyS, H*0.16 * bellyS, 0, 0, Math.PI*2);
-    ctx.fill(); ctx.stroke();
+    ctx.moveTo(-W*0.06, -H*0.12); ctx.lineTo(0, -H*0.08); ctx.lineTo(W*0.06, -H*0.12);
+    ctx.lineTo(W*0.04, -H*0.1); ctx.lineTo(0, -H*0.06); ctx.lineTo(-W*0.04, -H*0.1);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
 
     // 手臂
-    ctx.fillStyle = SKIN;
-    ctx.beginPath(); ctx.ellipse(-W*0.22, -H*0.02, W*0.05, H*0.12, -0.3, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.ellipse(W*0.22, -H*0.02, W*0.05, H*0.12, 0.3, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = skinGrad();
+    ctx.beginPath(); ctx.ellipse(-W*0.25, -H*0.04, W*0.06, H*0.13, -0.35, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(W*0.25, -H*0.04, W*0.06, H*0.13, 0.35, 0, Math.PI*2); ctx.fill(); ctx.stroke();
     // 手
-    ctx.beginPath(); ctx.arc(-W*0.24, H*0.06, W*0.04, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.arc(W*0.24, H*0.06, W*0.04, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(-W*0.27, H*0.07, W*0.045, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(W*0.27, H*0.07, W*0.045, 0, Math.PI*2); ctx.fill(); ctx.stroke();
 
     // 脖子
-    ctx.fillStyle = SKIN;
-    ctx.fillRect(-W*0.05, -H*0.14, W*0.1, H*0.06);
-    ctx.strokeRect(-W*0.05, -H*0.14, W*0.1, H*0.06);
+    ctx.fillStyle = skinGrad();
+    ctx.beginPath();
+    ctx.moveTo(-W*0.06, -H*0.14); ctx.lineTo(W*0.06, -H*0.14);
+    ctx.lineTo(W*0.06, -H*0.08); ctx.lineTo(-W*0.06, -H*0.08);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
 
-    // 头
+    // 头（带阴影渐变）
+    const headGrad = ctx.createRadialGradient(-W*0.05, -H*0.28, 0, 0, -H*0.2, W*0.22);
+    headGrad.addColorStop(0, '#FDE047');
+    headGrad.addColorStop(1, '#D4A017');
+    ctx.fillStyle = headGrad;
     ctx.beginPath();
-    ctx.ellipse(0, -H*0.2, W*0.18, H*0.18, 0, 0, Math.PI*2);
+    ctx.ellipse(0, -H*0.22, W*0.2, H*0.19, 0, 0, Math.PI*2);
     ctx.fill(); ctx.stroke();
-    // 头顶秃
+    // 头顶秃的弧线
     ctx.beginPath();
-    ctx.ellipse(0, -H*0.3, W*0.1, H*0.06, 0, 0, Math.PI*2);
-    ctx.fill(); ctx.stroke();
+    ctx.ellipse(0, -H*0.3, W*0.11, H*0.06, 0, Math.PI, 0);
+    ctx.strokeStyle = '#8B6914'; ctx.lineWidth = W*0.008; ctx.stroke();
+    ctx.strokeStyle = OUT; ctx.lineWidth = Math.max(2, W * 0.006);
     // 耳朵
-    ctx.beginPath(); ctx.arc(-W*0.17, -H*0.2, W*0.025, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.arc(W*0.17, -H*0.2, W*0.025, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = skinGrad();
+    ctx.beginPath(); ctx.arc(-W*0.19, -H*0.21, W*0.028, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(W*0.19, -H*0.21, W*0.028, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(-W*0.19, -H*0.21, W*0.012, 0, Math.PI*2); ctx.strokeStyle='#8B6914'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(W*0.19, -H*0.21, W*0.012, 0, Math.PI*2); ctx.stroke();
+    ctx.strokeStyle = OUT;
 
-    // 眼睛
+    // 眼睛（大而圆，两眼靠近）
     ctx.fillStyle = '#fff';
-    ctx.beginPath(); ctx.ellipse(-W*0.06, -H*0.22, W*0.05, H*0.055, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.ellipse(W*0.06, -H*0.22, W*0.05, H*0.055, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(-W*0.07, -H*0.24, W*0.052, H*0.058, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(W*0.07, -H*0.24, W*0.052, H*0.058, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    // 瞳孔（偏内，发呆眼神）
     ctx.fillStyle = OUT;
-    ctx.beginPath(); ctx.arc(-W*0.06, -H*0.22, W*0.015, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(W*0.06, -H*0.22, W*0.015, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-W*0.05, -H*0.23, W*0.016, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(W*0.09, -H*0.23, W*0.016, 0, Math.PI*2); ctx.fill();
+    // 眼睛高光
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(-W*0.045, -H*0.25, W*0.006, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(W*0.095, -H*0.25, W*0.006, 0, Math.PI*2); ctx.fill();
 
-    // 鼻子
-    ctx.fillStyle = SKIN;
+    // 鼻子（突出的圆鼻）
+    ctx.fillStyle = skinGrad();
     ctx.beginPath();
-    ctx.ellipse(0, -H*0.16, W*0.04, H*0.025, 0, 0, Math.PI*2);
+    ctx.ellipse(0, -H*0.17, W*0.045, H*0.032, 0, 0, Math.PI*2);
     ctx.fill(); ctx.stroke();
+    // 鼻下阴影
+    ctx.fillStyle = 'rgba(139,105,20,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(0, -H*0.155, W*0.03, H*0.012, 0, 0, Math.PI*2);
+    ctx.fill();
 
-    // 嘴 + 牙
+    // 嘴 + 大牙（上排牙齿突出）
     ctx.save();
     ctx.translate(0, -H*0.12);
     ctx.scale(mouthS, mouthS);
-    ctx.fillStyle = '#8B2500';
+    ctx.fillStyle = '#6B1F00';
     ctx.beginPath();
-    ctx.ellipse(0, 0, W*0.06, H*0.04, 0, 0, Math.PI*2);
+    ctx.ellipse(0, 0, W*0.065, H*0.045, 0, 0, Math.PI*2);
     ctx.fill(); ctx.stroke();
+    // 上排牙齿
     ctx.fillStyle = '#fff';
-    ctx.fillRect(-W*0.055, -H*0.04, W*0.11, H*0.02);
-    ctx.strokeRect(-W*0.055, -H*0.04, W*0.11, H*0.02);
+    ctx.fillRect(-W*0.06, -H*0.045, W*0.12, H*0.025);
+    ctx.strokeRect(-W*0.06, -H*0.045, W*0.12, H*0.025);
+    // 牙齿分隔线
+    ctx.strokeStyle = OUT; ctx.lineWidth = W*0.004;
+    for (let i = -2; i <= 2; i++) {
+      ctx.beginPath(); ctx.moveTo(i*W*0.024, -H*0.045); ctx.lineTo(i*W*0.024, -H*0.02); ctx.stroke();
+    }
+    ctx.lineWidth = Math.max(2, W * 0.006);
     ctx.restore();
 
-    // 甜甜圈（拿在右手边嘴边）
-    drawDonut(ctx, -W*0.13, -H*0.1, W*0.065 * donutS, donutS, donutS, -0.4);
+    // 甜甜圈（拿在右手边嘴边，可被放大扭曲）
+    drawDonut(ctx, -W*0.16, -H*0.1, W*0.075 * donutS, donutS, donutS, -0.35);
 
     ctx.restore();
   }
@@ -330,9 +415,12 @@
     ctx.save();
     ctx.translate(W*0.5, H*0.6);
     ctx.rotate(headTilt);
+    ctx.strokeStyle = OUT; ctx.lineWidth = Math.max(2, W * 0.006);
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    const mSkinGrad = () => { const g=ctx.createLinearGradient(0,-H*0.4,0,H*0.1); g.addColorStop(0,'#FDE047'); g.addColorStop(1,'#D4A017'); return g; };
 
     // 脖子
-    ctx.fillStyle = SKIN; ctx.strokeStyle = OUT; ctx.lineWidth = 4;
+    ctx.fillStyle = mSkinGrad();
     ctx.fillRect(-W*0.04, -H*0.08, W*0.08, H*0.06);
     ctx.strokeRect(-W*0.04, -H*0.08, W*0.08, H*0.06);
 
@@ -346,7 +434,7 @@
     ctx.closePath(); ctx.fill(); ctx.stroke();
 
     // 头
-    ctx.fillStyle = SKIN;
+    ctx.fillStyle = skinGrad(ctx, W, H);
     ctx.beginPath();
     ctx.ellipse(0, -H*0.18, W*0.16, H*0.16, 0, 0, Math.PI*2);
     ctx.fill(); ctx.stroke();
@@ -372,7 +460,7 @@
     ctx.beginPath(); ctx.arc(W*0.05, -H*0.19, W*0.012, 0, Math.PI*2); ctx.fill();
 
     // 鼻子
-    ctx.fillStyle = SKIN;
+    ctx.fillStyle = skinGrad(ctx, W, H);
     ctx.beginPath(); ctx.arc(0, -H*0.14, W*0.02, 0, Math.PI*2); ctx.fill(); ctx.stroke();
 
     // 嘴
@@ -401,9 +489,11 @@
 
     ctx.save();
     ctx.translate(W*0.5, H*0.62);
+    ctx.strokeStyle = OUT; ctx.lineWidth = Math.max(2, W * 0.006);
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
 
     // 腿
-    ctx.fillStyle = SKIN; ctx.strokeStyle = OUT; ctx.lineWidth = 4;
+    ctx.fillStyle = skinGrad(ctx, W, H);
     ctx.fillRect(-W*0.06, H*0.06, W*0.04, H*0.1); ctx.strokeRect(-W*0.06, H*0.06, W*0.04, H*0.1);
     ctx.fillRect(W*0.02, H*0.06, W*0.04, H*0.1); ctx.strokeRect(W*0.02, H*0.06, W*0.04, H*0.1);
     // 鞋
@@ -430,12 +520,12 @@
     ctx.closePath(); ctx.fill(); ctx.stroke();
 
     // 手臂
-    ctx.fillStyle = SKIN;
+    ctx.fillStyle = skinGrad(ctx, W, H);
     ctx.beginPath(); ctx.ellipse(-W*0.14, -H*0.06, W*0.03, H*0.06, -0.2, 0, Math.PI*2); ctx.fill(); ctx.stroke();
     ctx.beginPath(); ctx.ellipse(W*0.14, -H*0.06, W*0.03, H*0.06, 0.2, 0, Math.PI*2); ctx.fill(); ctx.stroke();
 
     // 头
-    ctx.fillStyle = SKIN;
+    ctx.fillStyle = skinGrad(ctx, W, H);
     ctx.beginPath();
     ctx.ellipse(0, -H*0.18, W*0.14, H*0.14, 0, 0, Math.PI*2);
     ctx.fill(); ctx.stroke();
@@ -453,7 +543,7 @@
       ctx.lineTo(x1, -H*0.06 + yOff);
       ctx.lineTo(x2, 0);
     }
-    ctx.fillStyle = SKIN;
+    ctx.fillStyle = skinGrad(ctx, W, H);
     ctx.fill(); ctx.stroke();
     ctx.restore();
 
@@ -466,7 +556,7 @@
     ctx.beginPath(); ctx.arc(W*0.04, -H*0.19, W*0.01, 0, Math.PI*2); ctx.fill();
 
     // 鼻子
-    ctx.fillStyle = SKIN;
+    ctx.fillStyle = skinGrad(ctx, W, H);
     ctx.beginPath(); ctx.arc(0, -H*0.15, W*0.018, 0, Math.PI*2); ctx.fill(); ctx.stroke();
 
     // 嘴（大笑）
@@ -491,9 +581,11 @@
 
     ctx.save();
     ctx.translate(W*0.5, H*0.6);
+    ctx.strokeStyle = OUT; ctx.lineWidth = Math.max(2, W * 0.006);
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
 
     // 腿
-    ctx.fillStyle = SKIN; ctx.strokeStyle = OUT; ctx.lineWidth = 4;
+    ctx.fillStyle = skinGrad(ctx, W, H);
     ctx.fillRect(-W*0.05, H*0.04, W*0.035, H*0.1); ctx.strokeRect(-W*0.05, H*0.04, W*0.035, H*0.1);
     ctx.fillRect(W*0.015, H*0.04, W*0.035, H*0.1); ctx.strokeRect(W*0.015, H*0.04, W*0.035, H*0.1);
     // 玛丽珍鞋
@@ -511,12 +603,12 @@
     ctx.closePath(); ctx.fill(); ctx.stroke();
 
     // 手臂
-    ctx.fillStyle = SKIN;
+    ctx.fillStyle = skinGrad(ctx, W, H);
     ctx.beginPath(); ctx.ellipse(-W*0.13, -H*0.02, W*0.025, H*0.05, -0.3, 0, Math.PI*2); ctx.fill(); ctx.stroke();
     ctx.beginPath(); ctx.ellipse(W*0.13, -H*0.02, W*0.025, H*0.05, 0.3, 0, Math.PI*2); ctx.fill(); ctx.stroke();
 
     // 头
-    ctx.fillStyle = SKIN;
+    ctx.fillStyle = skinGrad(ctx, W, H);
     ctx.beginPath();
     ctx.ellipse(0, -H*0.16, W*0.13, H*0.13, 0, 0, Math.PI*2);
     ctx.fill(); ctx.stroke();
@@ -525,7 +617,7 @@
     ctx.save();
     ctx.translate(0, -H*0.26);
     ctx.rotate(saxSpin * 0.5);
-    ctx.fillStyle = SKIN;
+    ctx.fillStyle = skinGrad(ctx, W, H);
     const starR = W * (0.08 + hairGrow * 0.04);
     ctx.beginPath();
     for (let i = 0; i < 10; i++) {
@@ -546,7 +638,7 @@
     ctx.beginPath(); ctx.arc(W*0.035, -H*0.16, W*0.008, 0, Math.PI*2); ctx.fill();
 
     // 鼻子
-    ctx.fillStyle = SKIN;
+    ctx.fillStyle = skinGrad(ctx, W, H);
     ctx.beginPath(); ctx.arc(0, -H*0.12, W*0.015, 0, Math.PI*2); ctx.fill(); ctx.stroke();
 
     // 嘴
@@ -625,8 +717,56 @@
     longPressTimer: null,
     holdFired: false,
     pointer: null,
-    rafId: null
+    rafId: null,
+    swirls: []             // 活跃的旋涡效果 [{cx,cy,radius,angle,start,duration}]
   };
+
+  // 旋涡扭曲（像素级，模拟图3的甜甜圈被吸入的效果）
+  function applySwirls() {
+    if (!state.swirls.length) return;
+    const W = canvas.width, H = canvas.height;
+    const dpr = window.devicePixelRatio || 1;
+    let imgData;
+    try { imgData = ctx.getImageData(0, 0, W, H); } catch(e) { return; }
+    const data = imgData.data;
+    const temp = new Uint8ClampedArray(data);
+    const now = performance.now();
+    state.swirls = state.swirls.filter(s => now - s.start < s.duration);
+    state.swirls.forEach(s => {
+      const t = (now - s.start) / s.duration;
+      // 旋涡角度先增后减（0 -> max -> 0）
+      const angle = s.angle * Math.sin(t * Math.PI);
+      const cx = s.cx * dpr, cy = s.cy * dpr, radius = s.radius * dpr;
+      const r2 = radius * radius;
+      const x0 = Math.max(0, Math.floor(cx - radius));
+      const y0 = Math.max(0, Math.floor(cy - radius));
+      const x1 = Math.min(W, Math.ceil(cx + radius));
+      const y1 = Math.min(H, Math.ceil(cy + radius));
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const dx = x - cx, dy = y - cy;
+          const dist2 = dx*dx + dy*dy;
+          if (dist2 < r2) {
+            const f = 1 - Math.sqrt(dist2) / radius;
+            const a = angle * f * f;
+            const cos = Math.cos(a), sin = Math.sin(a);
+            const sx = cx + dx * cos - dy * sin;
+            const sy = cy + dx * sin + dy * cos;
+            const ix = Math.floor(sx), iy = Math.floor(sy);
+            if (ix >= 0 && ix < W && iy >= 0 && iy < H) {
+              const di = (y * W + x) * 4;
+              const si = (iy * W + ix) * 4;
+              data[di] = temp[si];
+              data[di+1] = temp[si+1];
+              data[di+2] = temp[si+2];
+              data[di+3] = temp[si+3];
+            }
+          }
+        }
+      }
+    });
+    ctx.putImageData(imgData, 0, 0);
+  }
 
   function resizeCanvas() {
     const r = stage.getBoundingClientRect();
@@ -650,6 +790,8 @@
       renderGlitch(W, H);
     } else {
       renderNormal(W, H);
+      // 普通模式下叠加旋涡扭曲（像素级）
+      if (state.swirls.length) applySwirls();
     }
   }
 
@@ -688,51 +830,61 @@
       char.draw(offCtx, W, H, state.dist);
     }
 
-    // 整体旋转 + 脉动缩放
-    const rot = Math.sin(state.glitchTime * 3) * 0.15;
-    const sc = 1 + Math.sin(state.glitchTime * 8) * 0.08;
+    // 整体剧烈旋转 + 脉动缩放
+    const rot = Math.sin(state.glitchTime * 4) * 0.3 + Math.sin(state.glitchTime * 13) * 0.08;
+    const sc = 1 + Math.sin(state.glitchTime * 10) * 0.15;
     ctx.save();
     ctx.translate(W/2, H/2);
     ctx.rotate(rot);
     ctx.scale(sc, sc);
     ctx.translate(-W/2, -H/2);
 
-    // RGB 分离绘制
-    const slices = 16;
+    // 整层 RGB 三色错位叠加（强烈色差）
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = 0.85;
+    drawChannel(offscreen, 0, 0, W, H, -10 - Math.random()*10, Math.random()*6-3, '255,0,0');
+    drawChannel(offscreen, 0, 0, W, H, 10 + Math.random()*10, Math.random()*6-3, '0,255,255');
+    drawChannel(offscreen, 0, 0, W, H, Math.random()*8-4, -8 - Math.random()*8, '0,255,0');
+
+    // 水平切片撕裂
+    const slices = 24;
     const sliceH = H / slices;
     for (let i = 0; i < slices; i++) {
       const sy = i * sliceH;
-      const offset = (Math.random() - 0.5) * 30 * (Math.random() < 0.4 ? 1 : 0.1);
-      // R 通道偏左
-      ctx.globalCompositeOperation = 'screen';
-      ctx.globalAlpha = 0.8;
-      ctx.drawImage(offscreen, 0, sy, W, sliceH, offset, sy, W, sliceH);
-      // 用红绿蓝分别 tint
-      drawChannel(offscreen, 0, sy, W, sliceH, offset - 6, sy, '255,0,0');
-      drawChannel(offscreen, 0, sy, W, sliceH, offset + 6, sy, '0,255,255');
-      drawChannel(offscreen, 0, sy, W, sliceH, offset, sy, '0,255,0');
+      if (Math.random() < 0.45) {
+        const offset = (Math.random() - 0.5) * W * 0.35;
+        ctx.drawImage(offscreen, 0, sy, W, sliceH, offset, sy, W, sliceH);
+      }
     }
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
 
-    // 像素块：随机方块色彩反转
-    for (let i = 0; i < 8; i++) {
+    // 随机彩色像素块
+    for (let i = 0; i < 14; i++) {
       const bx = Math.random() * W;
       const by = Math.random() * H;
-      const bw = 20 + Math.random() * 80;
-      const bh = 4 + Math.random() * 12;
-      ctx.fillStyle = `hsl(${Math.random()*360},100%,60%)`;
-      ctx.globalAlpha = 0.4;
+      const bw = 15 + Math.random() * 100;
+      const bh = 3 + Math.random() * 16;
+      ctx.fillStyle = `hsl(${Math.random()*360},100%,55%)`;
+      ctx.globalAlpha = 0.5;
       ctx.fillRect(bx, by, bw, bh);
     }
     ctx.globalAlpha = 1;
 
     ctx.restore();
 
+    // 全屏扫描线
+    ctx.globalAlpha = 0.12;
+    for (let y = 0; y < H; y += 3) {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, y, W, 1);
+    }
+    ctx.globalAlpha = 1;
+
     // 边缘暗角
-    const grad = ctx.createRadialGradient(W/2, H/2, W*0.2, W/2, H/2, W*0.7);
+    const grad = ctx.createRadialGradient(W/2, H/2, W*0.15, W/2, H/2, W*0.75);
     grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(1, 'rgba(0,0,0,0.5)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.65)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
   }
@@ -755,9 +907,9 @@
     ctx.drawImage(c, dx, dy);
   }
 
-  // 动画循环（GLITCH 模式持续重绘）
+  // 动画循环（GLITCH 模式 + 旋涡动画 持续重绘）
   function loop() {
-    if (state.glitch) render();
+    if (state.glitch || state.swirls.length) render();
     state.rafId = requestAnimationFrame(loop);
   }
 
@@ -782,9 +934,8 @@
     return best;
   }
 
-  function triggerFeature(feat) {
+  function triggerFeature(feat, px, py) {
     if (!feat) {
-      // 点击空白：轻微整体扭曲
       const char = CHARS[state.charIdx];
       if (char.features.length) feat = char.features[0];
       else return;
@@ -792,10 +943,9 @@
     state.dist[feat.id] = 1;
     clearTimeout(state.distTimers[feat.id]);
     state.distTimers[feat.id] = setTimeout(() => {
-      // 弹性回弹
       const start = performance.now();
       const from = state.dist[feat.id] || 0;
-      const dur = 400;
+      const dur = 450;
       function step(now) {
         const t = Math.min(1, (now - start) / dur);
         const ease = 1 - Math.pow(1 - t, 3);
@@ -805,7 +955,18 @@
         else state.dist[feat.id] = 0;
       }
       requestAnimationFrame(step);
-    }, 1200);
+    }, 1000);
+    // 添加旋涡扭曲（像素级吸入效果）
+    const r = canvas.getBoundingClientRect();
+    const cx = (px != null ? px : feat.x) * r.width;
+    const cy = (py != null ? py : feat.y) * r.height;
+    const radius = Math.max(feat.w, feat.h) * r.width * 1.2;
+    state.swirls.push({
+      cx, cy, radius,
+      angle: Math.PI * 2.5,
+      start: performance.now(),
+      duration: 700
+    });
     AudioEngine.sfx(CHARS[state.charIdx].sound);
     if (!state.glitch) render();
   }
@@ -847,7 +1008,7 @@
     // 普通模式：轻击扭曲最近特征
     const p = canvasPoint(e);
     const feat = hitFeature(p.x, p.y);
-    triggerFeature(feat);
+    triggerFeature(feat, p.x, p.y);
   }
 
   canvas.addEventListener('pointerdown', onPointerDown, { passive: false });
