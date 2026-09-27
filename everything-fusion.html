@@ -481,9 +481,8 @@ function render(){
 render();
 renderPool();
 
-// ===== Fusion Visual: BODY (shape) + FACE (features) → one fused character =====
-// emojiBody = the item providing the main shape/body
-// emojiFace = the item whose face/features are overlaid onto the body
+// ===== Fusion Visual: face PAINTED onto the body silhouette via source-atop =====
+const _fuse = document.createElement('canvas');
 function drawFusionVisual(canvas, emojiBody, emojiFace) {
   const ctx = canvas.getContext('2d');
   const S = 340;
@@ -514,45 +513,41 @@ function drawFusionVisual(canvas, emojiBody, emojiFace) {
     ctx.beginPath(); ctx.arc(sx, sy, 2 + Math.sin(t * 4 + i) * 1.5, 0, Math.PI * 2); ctx.fill();
   }
 
-  // gentle breathing pulse for the whole fused character
+  // === Build fused character on offscreen canvas ===
+  // body emoji is the silhouette; face is painted ONTO it via source-atop
+  _fuse.width = S; _fuse.height = S;
+  const fc = _fuse.getContext('2d');
+  fc.clearRect(0, 0, S, S);
   const pulse = 1 + Math.sin(t * 2) * 0.03;
 
-  // === 1) Draw the BODY — large, centered, the main shape ===
+  // 1) Draw the body (the main silhouette)
   const bodySize = S * 0.72 * pulse;
-  ctx.save();
-  ctx.font = `${bodySize}px serif`;
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 16;
-  ctx.fillText(emojiBody, cx, cy + S * 0.02);
-  ctx.shadowBlur = 0;
-  ctx.restore();
+  fc.font = `${bodySize}px serif`;
+  fc.textAlign = 'center'; fc.textBaseline = 'middle';
+  fc.shadowColor = 'rgba(0,0,0,0.5)'; fc.shadowBlur = 16;
+  fc.fillText(emojiBody, cx, cy + S * 0.02);
+  fc.shadowBlur = 0;
 
-  // === 2) Draw the FACE — smaller, overlaid on the body's "face zone" ===
-  //    Positioned slightly above center where a face naturally sits.
-  const faceSize = S * 0.38 * pulse;
-  const faceX = cx;
-  const faceY = cy - S * 0.06;   // face sits in the upper-middle of the body
+  // 2) source-atop: face renders ONLY where the body already has pixels
+  //    → face looks painted onto the body, not floating above it
+  fc.globalCompositeOperation = 'source-atop';
+  const faceSize = bodySize * 0.85;   // near body size so face features cover the body's face area
+  fc.font = `${faceSize}px serif`;
+  fc.fillText(emojiFace, cx, cy - S * 0.01);
+  fc.globalCompositeOperation = 'source-over';
 
-  // face glow halo (makes the face feel part of the body)
-  const faceGlow = ctx.createRadialGradient(faceX, faceY, 0, faceX, faceY, faceSize * 0.55);
-  faceGlow.addColorStop(0, 'rgba(255,220,120,0.35)');
-  faceGlow.addColorStop(1, 'rgba(255,220,120,0)');
-  ctx.fillStyle = faceGlow;
-  ctx.beginPath(); ctx.arc(faceX, faceY, faceSize * 0.55, 0, Math.PI * 2); ctx.fill();
+  // 3) Punch up the facial features with a second lighter pass
+  fc.globalCompositeOperation = 'lighter';
+  fc.globalAlpha = 0.35;
+  fc.font = `${faceSize * 0.7}px serif`;
+  fc.fillText(emojiFace, cx, cy - S * 0.01);
+  fc.globalAlpha = 1;
+  fc.globalCompositeOperation = 'source-over';
 
-  // the face itself, with a subtle white outline so it reads on any body color
-  ctx.save();
-  ctx.font = `${faceSize}px serif`;
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  // draw a faint backing circle so the face is always legible
-  ctx.fillStyle = 'rgba(255,255,255,0.18)';
-  ctx.beginPath(); ctx.arc(faceX, faceY, faceSize * 0.42, 0, Math.PI * 2); ctx.fill();
-  ctx.shadowColor = 'rgba(255,255,255,0.8)'; ctx.shadowBlur = 8;
-  ctx.fillText(emojiFace, faceX, faceY);
-  ctx.shadowBlur = 0;
-  ctx.restore();
+  // draw the fused character onto the main canvas
+  ctx.drawImage(_fuse, 0, 0);
 
-  // === 3) Floating sparkles around the fused character ===
+  // floating sparkles
   for (let i = 0; i < 6; i++) {
     const ang = t * 1.2 + (i / 6) * Math.PI * 2;
     const r = S * 0.3 + Math.sin(t * 2 + i) * 8;
@@ -564,7 +559,7 @@ function drawFusionVisual(canvas, emojiBody, emojiFace) {
     ctx.fillText('✦', px, py);
   }
 
-  // unified pulsing aura around the single fused character
+  // unified pulsing aura
   const auraR = S * 0.34 + Math.sin(t * 2.5) * 6;
   const aura = ctx.createRadialGradient(cx, cy, S * 0.12, cx, cy, auraR);
   aura.addColorStop(0, 'rgba(255,140,0,0)');
