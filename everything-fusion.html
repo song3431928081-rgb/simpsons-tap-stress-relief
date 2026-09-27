@@ -470,7 +470,7 @@ function render(){
 render();
 renderPool();
 
-// ===== Fusion Visual: TRUE blend of both items =====
+// ===== Fusion Visual: merge both items into ONE unified entity =====
 function drawFusionVisual(canvas, emojiA, emojiB) {
   const ctx = canvas.getContext('2d');
   const S = 340;
@@ -479,6 +479,7 @@ function drawFusionVisual(canvas, emojiA, emojiB) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, S, S);
   const cx = S / 2, cy = S / 2;
+  const t = Date.now() * 0.001;
 
   // Halloween neon glow background
   const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, S * 0.5);
@@ -488,8 +489,6 @@ function drawFusionVisual(canvas, emojiA, emojiB) {
   grad.addColorStop(1, 'rgba(13,2,33,0)');
   ctx.fillStyle = grad;
   ctx.beginPath(); ctx.arc(cx, cy, S * 0.5, 0, Math.PI * 2); ctx.fill();
-
-  const t = Date.now() * 0.001;
 
   // rotating sparkle ring (Halloween colors)
   for (let i = 0; i < 10; i++) {
@@ -502,47 +501,61 @@ function drawFusionVisual(canvas, emojiA, emojiB) {
     ctx.beginPath(); ctx.arc(sx, sy, 2 + Math.sin(t * 4 + i) * 1.5, 0, Math.PI * 2); ctx.fill();
   }
 
-  // === TRUE BLEND: draw both emojis merged via compositing ===
-  const baseSize = S * 0.52;
+  // === MERGE INTO ONE: both emojis at same center, same size, blended ===
+  const baseSize = S * 0.55;
+  // gentle pulsing so the merged entity breathes as one
+  const pulse = 1 + Math.sin(t * 2) * 0.04;
+  const fontSize = baseSize * pulse;
 
-  // Item A as base body (centered, full opacity)
+  // Draw item A — the body
   ctx.save();
-  ctx.font = `${baseSize}px serif`;
+  ctx.font = `${fontSize}px serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 10;
-  ctx.fillText(emojiA, cx, cy + S * 0.02);
+  ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 12;
+  ctx.fillText(emojiA, cx, cy);
   ctx.shadowBlur = 0;
   ctx.restore();
 
-  // Item B blended on top using 'screen' mode — features of B merge INTO A
+  // Draw item B at the SAME center & size, 'screen' blend → merges into A as one shape
   ctx.save();
   ctx.globalCompositeOperation = 'screen';
-  ctx.globalAlpha = 0.75;
-  // slightly offset and smaller so B's features appear as a fusion overlay
-  ctx.font = `${baseSize * 0.62}px serif`;
+  ctx.globalAlpha = 0.85;
+  ctx.font = `${fontSize}px serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.shadowColor = 'rgba(255,200,100,0.9)'; ctx.shadowBlur = 16;
-  ctx.fillText(emojiB, cx + S * 0.16, cy - S * 0.14);
+  // tiny rotation so features interleave (not identical overlap)
+  ctx.translate(cx, cy);
+  ctx.rotate(Math.sin(t * 1.5) * 0.06);
+  ctx.shadowColor = 'rgba(255,200,80,0.95)'; ctx.shadowBlur = 20;
+  ctx.fillText(emojiB, 0, 0);
   ctx.restore();
 
-  // Add a second translucent pass of B in 'lighten' for extra merge depth
+  // Third pass: 'lighten' overlay of B at center to deepen the merge
   ctx.save();
   ctx.globalCompositeOperation = 'lighten';
-  ctx.globalAlpha = 0.35;
-  ctx.font = `${baseSize * 0.45}px serif`;
+  ctx.globalAlpha = 0.4;
+  ctx.font = `${fontSize * 0.9}px serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(emojiB, cx - S * 0.12, cy + S * 0.18);
+  ctx.fillText(emojiB, cx, cy);
   ctx.restore();
+
+  // Unified pulsing aura around the merged entity (treats it as ONE)
+  const auraR = S * 0.34 + Math.sin(t * 2.5) * 6;
+  const aura = ctx.createRadialGradient(cx, cy, S * 0.15, cx, cy, auraR);
+  aura.addColorStop(0, 'rgba(255,140,0,0)');
+  aura.addColorStop(0.6, `rgba(255,140,0,${0.25 + Math.sin(t * 2) * 0.1})`);
+  aura.addColorStop(1, 'rgba(107,0,182,0)');
+  ctx.fillStyle = aura;
+  ctx.beginPath(); ctx.arc(cx, cy, auraR, 0, Math.PI * 2); ctx.fill();
 
   // central fusion sparkle
   ctx.fillStyle = '#ffd93d';
-  ctx.font = `${S * 0.12}px sans-serif`;
+  ctx.font = `${S * 0.1}px sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('✦', cx, cy - S * 0.02);
+  ctx.fillText('✦', cx, cy);
 }
 
 let fusionAnimId = null;
