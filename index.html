@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#1a1a2e" />
+  <title>减压踢踏 · 辛普森混搭</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <header id="topbar">
+      <div id="title">减压踢踏</div>
+      <div id="controls">
+        <button id="bgmBtn" class="ctrl" title="背景音乐开/关" aria-label="背景音乐">🎵</button>
+        <button id="muteBtn" class="ctrl" title="静音" aria-label="静音">🔊</button>
+      </div>
+    </header>
+
+    <div id="hint">轻击扭曲表情 · 拖动五官 · 长按 3 秒触发融合彩蛋</div>
+
+    <main id="stage">
+      <div id="bgLayer"></div>
+      <div id="charWrap" class="neutral"></div>
+      <div id="rippleLayer"></div>
+      <div id="fusionTag" class="hidden">🥚 融合彩蛋 · 再点一下退出</div>
+      <div id="toast" class="hidden"></div>
+    </main>
+
+    <footer id="selector"></footer>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
