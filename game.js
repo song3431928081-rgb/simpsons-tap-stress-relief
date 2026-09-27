@@ -726,14 +726,15 @@
 
   const FILTERS = [
     { name: 'OFF', color: '#00E5FF' },
-    { name: 'RGB SPLIT', color: '#FF3B5C' },
-    { name: 'KALEIDO', color: '#B388FF' },
-    { name: 'PIXELATE', color: '#FFD400' },
-    { name: 'INVERT', color: '#7CFC00' },
-    { name: 'WAVE', color: '#00BFFF' },
-    { name: 'HUE BOOM', color: '#FF5CA8' },
-    { name: 'CRT', color: '#FF4500' },
-    { name: 'VORTEX', color: '#9B59B6' }
+    { name: 'PSYCHO', color: '#FF3B5C' },
+    { name: 'RAINBOW', color: '#FF5CA8' },
+    { name: 'SOLARIZE', color: '#FFD400' },
+    { name: 'POSTERIZE', color: '#B388FF' },
+    { name: 'TRIPPY', color: '#9B59B6' },
+    { name: 'THERMAL', color: '#FF4500' },
+    { name: 'DUOTONE', color: '#7CFC00' },
+    { name: 'NEGATE', color: '#00BFFF' },
+    { name: 'COLOR BLAST', color: '#FF6B35' }
   ];
 
   const MAX_SWIRLS = 4;
@@ -744,12 +745,11 @@
   const filterCtx = filterCanvas.getContext('2d');
   const FILTER_MAX_W = 420; // 滤镜处理最大宽度（像素）
 
-  // 应用魔性滤镜（在 render 末尾对整幅画面处理）
+  // 应用魔性滤镜（在 render 末尾对整幅画面处理）— 全部色彩变换
   function applyFilter() {
     const idx = state.filterIndex;
     if (idx === 0) return;
     const W = canvas.width, H = canvas.height;
-    const dpr = window.devicePixelRatio || 1;
     // 降分辨率处理
     const scale = Math.min(1, FILTER_MAX_W / W);
     const fw = Math.max(1, Math.floor(W * scale));
@@ -763,91 +763,38 @@
     const now = performance.now() * 0.001;
 
     if (idx === 1) {
-      // RGB SPLIT：红蓝通道大幅错位
-      const off = Math.floor(fw * 0.06);
+      // PSYCHO：每行随机通道交换 + 色阶抖动
       for (let y = 0; y < fh; y++) {
+        const mode = (y * 7 + Math.floor(now * 10)) % 6;
         for (let x = 0; x < fw; x++) {
           const i = (y * fw + x) * 4;
-          const rx = Math.min(fw - 1, x + off);
-          const bx = Math.max(0, x - off);
-          out[i] = d[(y * fw + rx) * 4];          // R 右移
-          out[i + 1] = d[i + 1];                    // G 不变
-          out[i + 2] = d[(y * fw + bx) * 4 + 2];   // B 左移
+          const r = d[i], g = d[i + 1], b = d[i + 2];
+          // 随机通道排列
+          if (mode === 0) { out[i] = r; out[i+1] = g; out[i+2] = b; }
+          else if (mode === 1) { out[i] = g; out[i+1] = b; out[i+2] = r; }
+          else if (mode === 2) { out[i] = b; out[i+1] = r; out[i+2] = g; }
+          else if (mode === 3) { out[i] = r; out[i+1] = b; out[i+2] = g; }
+          else if (mode === 4) { out[i] = b; out[i+1] = g; out[i+2] = r; }
+          else { out[i] = g; out[i+1] = r; out[i+2] = b; }
+          // 色阶抖动
+          const q = ((x * 13 + y * 7) % 32) - 16;
+          out[i] = Math.max(0, Math.min(255, out[i] + q));
+          out[i+1] = Math.max(0, Math.min(255, out[i+1] + q));
+          out[i+2] = Math.max(0, Math.min(255, out[i+2] + q));
         }
       }
     } else if (idx === 2) {
-      // KALEIDOSCOPE：6 重镜像对称
-      const cx = fw / 2, cy = fh / 2;
-      const segments = 6;
-      for (let y = 0; y < fh; y++) {
-        for (let x = 0; x < fw; x++) {
-          const dx = x - cx, dy = y - cy;
-          let a = Math.atan2(dy, dx);
-          const r = Math.sqrt(dx * dx + dy * dy);
-          const seg = (Math.PI * 2) / segments;
-          a = ((a % seg) + seg) % seg;
-          if (a > seg / 2) a = seg - a;
-          const sx = Math.floor(cx + Math.cos(a) * r);
-          const sy = Math.floor(cy + Math.sin(a) * r);
-          if (sx >= 0 && sx < fw && sy >= 0 && sy < fh) {
-            const i = (y * fw + x) * 4;
-            const s = (sy * fw + sx) * 4;
-            out[i] = d[s]; out[i + 1] = d[s + 1]; out[i + 2] = d[s + 2]; out[i + 3] = d[s + 3];
-          }
-        }
-      }
-    } else if (idx === 3) {
-      // PIXELATE：马赛克
-      const bs = Math.max(4, Math.floor(fw / 40));
-      for (let y = 0; y < fh; y += bs) {
-        for (let x = 0; x < fw; x += bs) {
-          let r = 0, g = 0, b = 0, cnt = 0;
-          for (let yy = y; yy < Math.min(fh, y + bs); yy++) {
-            for (let xx = x; xx < Math.min(fw, x + bs); xx++) {
-              const i = (yy * fw + xx) * 4;
-              r += d[i]; g += d[i + 1]; b += d[i + 2]; cnt++;
-            }
-          }
-          r = r / cnt | 0; g = g / cnt | 0; b = b / cnt | 0;
-          for (let yy = y; yy < Math.min(fh, y + bs); yy++) {
-            for (let xx = x; xx < Math.min(fw, x + bs); xx++) {
-              const i = (yy * fw + xx) * 4;
-              out[i] = r; out[i + 1] = g; out[i + 2] = b;
-            }
-          }
-        }
-      }
-    } else if (idx === 4) {
-      // INVERT：反色 + 对比度增强
-      for (let i = 0; i < d.length; i += 4) {
-        out[i] = 255 - d[i];
-        out[i + 1] = 255 - d[i + 1];
-        out[i + 2] = 255 - d[i + 2];
-      }
-    } else if (idx === 5) {
-      // WAVE：水平正弦位移
-      const amp = fw * 0.06;
-      for (let y = 0; y < fh; y++) {
-        const shift = Math.floor(Math.sin(y * 0.08 + now * 3) * amp);
-        for (let x = 0; x < fw; x++) {
-          const sx = Math.max(0, Math.min(fw - 1, x + shift));
-          const i = (y * fw + x) * 4;
-          const s = (y * fw + sx) * 4;
-          out[i] = d[s]; out[i + 1] = d[s + 1]; out[i + 2] = d[s + 2]; out[i + 3] = d[s + 3];
-        }
-      }
-    } else if (idx === 6) {
-      // HUE BOOM：色相旋转 + 饱和拉满
+      // RAINBOW：色相流动 + 饱和拉满 + 高对比
       for (let i = 0; i < d.length; i += 4) {
         const r = d[i], g = d[i + 1], b = d[i + 2];
         const max = Math.max(r, g, b), min = Math.min(r, g, b);
-        let h, s = max === 0 ? 0 : (max - min) / max, l = (max + min) / 2 / 255;
+        let h, l = (max + min) / 2 / 255;
         if (max === min) h = 0;
         else if (max === r) h = ((g - b) / (max - min)) % 6;
         else if (max === g) h = (b - r) / (max - min) + 2;
         else h = (r - g) / (max - min) + 4;
-        h = (h * 60 + now * 180) % 360; if (h < 0) h += 360;
-        s = 1; // 饱和拉满
+        h = (h * 60 + now * 240) % 360; if (h < 0) h += 360;
+        const s = 1;
         const c = (1 - Math.abs(2 * l - 1)) * s;
         const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
         const m = l - c / 2;
@@ -858,50 +805,112 @@
         else if (h < 240) { r1 = 0; g1 = x; b1 = c; }
         else if (h < 300) { r1 = x; g1 = 0; b1 = c; }
         else { r1 = c; g1 = 0; b1 = x; }
-        out[i] = (r1 + m) * 255;
-        out[i + 1] = (g1 + m) * 255;
-        out[i + 2] = (b1 + m) * 255;
+        // 高对比：提亮暗部压暗亮部
+        const boost = l < 0.5 ? l * 1.4 : 0.3 + l * 0.9;
+        out[i] = Math.min(255, (r1 + m) * 255 * (0.6 + boost * 0.8));
+        out[i + 1] = Math.min(255, (g1 + m) * 255 * (0.6 + boost * 0.8));
+        out[i + 2] = Math.min(255, (b1 + m) * 255 * (0.6 + boost * 0.8));
       }
-    } else if (idx === 7) {
-      // CRT：扫描线 + RGB 错位 + 暗角
-      const off = Math.floor(fw * 0.04);
+    } else if (idx === 3) {
+      // SOLARIZE：高反差阈值反转
+      for (let i = 0; i < d.length; i += 4) {
+        const r = d[i], g = d[i + 1], b = d[i + 2];
+        out[i] = r < 128 ? r : 255 - r;
+        out[i + 1] = g < 128 ? g : 255 - g;
+        out[i + 2] = b < 128 ? b : 255 - b;
+      }
+    } else if (idx === 4) {
+      // POSTERIZE：色阶压缩到 5 级，海报化抽象
+      const levels = 5;
+      const step = 255 / (levels - 1);
+      for (let i = 0; i < d.length; i += 4) {
+        out[i] = Math.round(d[i] / step) * step;
+        out[i + 1] = Math.round(d[i + 1] / step) * step;
+        out[i + 2] = Math.round(d[i + 2] / step) * step;
+      }
+    } else if (idx === 5) {
+      // TRIPPY：色相旋转 + 红蓝通道偏移 + 随机噪点
+      const off = Math.floor(fw * 0.05);
       for (let y = 0; y < fh; y++) {
-        const scanline = (y % 3 === 0) ? 0.6 : 1;
         for (let x = 0; x < fw; x++) {
           const i = (y * fw + x) * 4;
           const rx = Math.min(fw - 1, x + off);
           const bx = Math.max(0, x - off);
-          out[i] = d[(y * fw + rx) * 4] * scanline;
-          out[i + 1] = d[i + 1] * scanline;
-          out[i + 2] = d[(y * fw + bx) * 4 + 2] * scanline;
+          let r = d[(y * fw + rx) * 4];
+          let g = d[i + 1];
+          let b = d[(y * fw + bx) * 4 + 2];
+          // 色相旋转
+          const gray = (r + g + b) / 3;
+          const ang = now * 2 + y * 0.05;
+          const cr = Math.cos(ang), sr = Math.sin(ang);
+          const nr = gray + (r - gray) * cr - (b - gray) * sr;
+          const nb = gray + (r - gray) * sr + (b - gray) * cr;
+          // 噪点
+          const noise = (Math.random() - 0.5) * 50;
+          out[i] = Math.max(0, Math.min(255, nr + noise));
+          out[i + 1] = Math.max(0, Math.min(255, g + noise * 0.5));
+          out[i + 2] = Math.max(0, Math.min(255, nb + noise));
         }
       }
+    } else if (idx === 6) {
+      // THERMAL：热成像伪彩（蓝→青→绿→黄→红）
+      for (let i = 0; i < d.length; i += 4) {
+        const lum = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;
+        // 5 段伪彩映射
+        let r, g, b;
+        if (lum < 0.2) { const t = lum / 0.2; r = 0; g = 0; b = 60 + t * 195; }
+        else if (lum < 0.4) { const t = (lum - 0.2) / 0.2; r = 0; g = t * 255; b = 255 - t * 255; }
+        else if (lum < 0.6) { const t = (lum - 0.4) / 0.2; r = t * 255; g = 255; b = 0; }
+        else if (lum < 0.8) { const t = (lum - 0.6) / 0.2; r = 255; g = 255 - t * 200; b = t * 100; }
+        else { const t = (lum - 0.8) / 0.2; r = 255; g = 55 + t * 200; b = 100 + t * 100; }
+        out[i] = r; out[i + 1] = g; out[i + 2] = b;
+      }
+    } else if (idx === 7) {
+      // DUOTONE：极端双色（亮部=品红，暗部=青绿）
+      for (let i = 0; i < d.length; i += 4) {
+        const lum = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;
+        // 亮部品红 #FF00FF，暗部青绿 #00FFCC
+        const dark = [0, 255, 204], light = [255, 0, 255];
+        const t = Math.pow(lum, 1.5);
+        out[i] = dark[0] + (light[0] - dark[0]) * t;
+        out[i + 1] = dark[1] + (light[1] - dark[1]) * t;
+        out[i + 2] = dark[2] + (light[2] - dark[2]) * t;
+      }
     } else if (idx === 8) {
-      // VORTEX：全屏旋涡
-      const cx = fw / 2, cy = fh / 2;
-      const maxR = Math.sqrt(cx * cx + cy * cy);
+      // NEGATE：反色 + 红蓝通道互换 + 对比度爆炸
+      for (let i = 0; i < d.length; i += 4) {
+        let r = 255 - d[i], g = 255 - d[i + 1], b = 255 - d[i + 2];
+        // 红蓝互换
+        out[i] = b; out[i + 1] = g; out[i + 2] = r;
+        // 对比度爆炸
+        out[i] = Math.max(0, Math.min(255, (out[i] - 128) * 1.8 + 128));
+        out[i + 1] = Math.max(0, Math.min(255, (out[i + 1] - 128) * 1.8 + 128));
+        out[i + 2] = Math.max(0, Math.min(255, (out[i + 2] - 128) * 1.8 + 128));
+      }
+    } else if (idx === 9) {
+      // COLOR BLAST：按亮度映射到彩虹色，每个像素位置固定色
+      const palette = [
+        [255, 0, 0], [255, 128, 0], [255, 255, 0], [0, 255, 0],
+        [0, 255, 255], [0, 0, 255], [128, 0, 255], [255, 0, 255]
+      ];
       for (let y = 0; y < fh; y++) {
         for (let x = 0; x < fw; x++) {
-          const dx = x - cx, dy = y - cy;
-          const r = Math.sqrt(dx * dx + dy * dy);
-          const f = 1 - r / maxR;
-          const a = Math.PI * 4 * f * f + now * 2;
-          const cos = Math.cos(a), sin = Math.sin(a);
-          const sx = Math.floor(cx + dx * cos - dy * sin);
-          const sy = Math.floor(cy + dx * sin + dy * cos);
-          if (sx >= 0 && sx < fw && sy >= 0 && sy < fh) {
-            const i = (y * fw + x) * 4;
-            const s = (sy * fw + sx) * 4;
-            out[i] = d[s]; out[i + 1] = d[s + 1]; out[i + 2] = d[s + 2]; out[i + 3] = d[s + 3];
-          }
+          const i = (y * fw + x) * 4;
+          const lum = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
+          const idx2 = Math.min(palette.length - 1, Math.floor(lum / 32));
+          const c = palette[idx2];
+          // 叠加位置色相偏移
+          const hueShift = ((x + y) % 60) / 60;
+          out[i] = c[0] * (0.7 + hueShift * 0.6);
+          out[i + 1] = c[1] * (0.7 + ((1 - hueShift) * 0.6));
+          out[i + 2] = c[2] * (0.7 + hueShift * 0.6);
         }
       }
     }
 
     filterCtx.putImageData(img, 0, 0);
-    ctx.imageSmoothingEnabled = (idx !== 3); // 像素化时关闭平滑
-    ctx.drawImage(filterCanvas, 0, 0, W, H);
     ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(filterCanvas, 0, 0, W, H);
   }
   // 旋涡扭曲（像素级，合并所有旋涡到一次 getImageData/putImageData）
   function applySwirls() {
@@ -1010,7 +1019,7 @@
   }
 
   // 需要持续重绘的动画滤镜
-  const ANIMATED_FILTERS = new Set([5, 6, 8]); // WAVE, HUE BOOM, VORTEX
+  const ANIMATED_FILTERS = new Set([1, 2, 5]); // PSYCHO, RAINBOW, TRIPPY
 
   // 生成粒子爆发
   function spawnParticles(cx, cy, count, colors) {
