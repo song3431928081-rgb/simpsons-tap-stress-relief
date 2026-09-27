@@ -52,7 +52,7 @@ canvas{display:block;touch-action:none}
 /* fusion result popup */
 #result-popup{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0);background:linear-gradient(135deg,#ff6b9d,#a855f7);border:4px solid #ffd93d;border-radius:20px;padding:24px 30px;z-index:120;text-align:center;transition:transform .4s cubic-bezier(.34,1.56,.64,1);box-shadow:0 0 40px rgba(255,107,157,.6)}
 #result-popup.show{transform:translate(-50%,-50%) scale(1)}
-#result-emoji{font-size:72px;filter:drop-shadow(0 4px 12px rgba(0,0,0,.3))}
+#result-emoji{width:160px;height:160px;margin:0 auto;filter:drop-shadow(0 4px 16px rgba(255,107,157,.5))}
 #result-name{color:#fff;font-size:20px;font-weight:700;margin:8px 0;text-shadow:2px 2px 0 rgba(0,0,0,.3)}
 #result-desc{color:#ffd93d;font-size:13px;margin-bottom:12px;max-width:240px}
 #result-actions{display:flex;gap:8px;justify-content:center}
@@ -80,7 +80,7 @@ canvas{display:block;touch-action:none}
 
 <!-- result popup -->
 <div id="result-popup">
-  <div id="result-emoji">❓</div>
+  <canvas id="result-emoji" width="320" height="320"></canvas>
   <div id="result-name">融合中...</div>
   <div id="result-desc"></div>
   <div id="result-actions">
@@ -281,40 +281,50 @@ function renderPool(){
     div.dataset.id=it.id;
     div.innerHTML=`<div class="pool-emoji">${isUnlocked(it.id)?it.emoji:'🔒'}</div><div class="pool-name">${it.name}</div>`;
     if(!isUnlocked(it.id))return;
-    // drag handlers
-    let startX,startY,moved=false,longT;
+    // drag handlers - move/up on document so drag works outside the item
+    let startX,startY,moved=false,longT,moveH,upH;
     function onStart(e){
       e.preventDefault();
       const t=e.touches?e.touches[0]:e;
       startX=t.clientX;startY=t.clientY;moved=false;
       const a=ac();if(a.state==='suspended')a.resume();
-      longT=setTimeout(()=>{showDetail(it)},500);
-    }
-    function onMove(e){
-      const t=e.touches?e.touches[0]:e;
-      if(Math.hypot(t.clientX-startX,t.clientY-startY)>8){
-        moved=true;clearTimeout(longT);
-        if(dragGhost.style.display==='none'){
+      longT=setTimeout(()=>{showDetail(it)},600);
+      moveH=ev=>{
+        const p=ev.touches?ev.touches[0]:ev;
+        if(Math.hypot(p.clientX-startX,p.clientY-startY)>8){
+          moved=true;clearTimeout(longT);
           dragGhost.style.display='block';
           dragGhost.textContent=it.emoji;
+          dragGhost.style.left=p.clientX+'px';
+          dragGhost.style.top=p.clientY+'px';
+          draggingItem=it;
+        }else if(draggingItem){
+          dragGhost.style.left=p.clientX+'px';
+          dragGhost.style.top=p.clientY+'px';
         }
-        dragGhost.style.left=t.clientX+'px';
-        dragGhost.style.top=t.clientY+'px';
-        draggingItem=it;
+      };
+      upH=ev=>{
+        clearTimeout(longT);
+        document.removeEventListener('mousemove',moveH);
+        document.removeEventListener('mouseup',upH);
+        document.removeEventListener('touchmove',moveH);
+        document.removeEventListener('touchend',upH);
+        if(moved&&draggingItem){
+          const p=ev.changedTouches?ev.changedTouches[0]:ev;
+          handleDrop(p.clientX,p.clientY);
+        }
+        dragGhost.style.display='none';
+        draggingItem=null;
+      };
+      if(e.touches){
+        document.addEventListener('touchmove',moveH,{passive:false});
+        document.addEventListener('touchend',upH);
+      }else{
+        document.addEventListener('mousemove',moveH);
+        document.addEventListener('mouseup',upH);
       }
-    }
-    function onEnd(e){
-      clearTimeout(longT);
-      if(moved&&draggingItem){
-        const t=e.changedTouches?e.changedTouches[0]:e;
-        handleDrop(t.clientX,t.clientY);
-      }
-      dragGhost.style.display='none';
-      draggingItem=null;
     }
     div.addEventListener('touchstart',onStart,{passive:false});
-    div.addEventListener('touchmove',onMove,{passive:false});
-    div.addEventListener('touchend',onEnd);
     div.addEventListener('mousedown',onStart);
     div.addEventListener('dblclick',()=>showDetail(it));
     pool.appendChild(div);
@@ -464,18 +474,85 @@ function render(){
 render();
 renderPool();
 
+// ===== Fusion Visual: combine two items into one image =====
+function drawFusionVisual(canvas, emojiA, emojiB) {
+  const ctx = canvas.getContext('2d');
+  const S = canvas.width;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  if (canvas.width !== S * dpr) { canvas.width = S * dpr; canvas.height = S * dpr; }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, S, S);
+  const cx = S / 2, cy = S / 2;
+
+  // neon glow background
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, S * 0.5);
+  grad.addColorStop(0, 'rgba(255, 217, 61, 0.45)');
+  grad.addColorStop(0.45, 'rgba(255, 107, 157, 0.35)');
+  grad.addColorStop(1, 'rgba(168, 85, 247, 0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(cx, cy, S * 0.5, 0, Math.PI * 2); ctx.fill();
+
+  // rotating sparkle ring
+  const t = Date.now() * 0.001;
+  for (let i = 0; i < 8; i++) {
+    const ang = t + (i / 8) * Math.PI * 2;
+    const r = S * 0.42;
+    const sx = cx + Math.cos(ang) * r;
+    const sy = cy + Math.sin(ang) * r;
+    ctx.fillStyle = `rgba(255,255,255,${0.4 + Math.sin(t * 3 + i) * 0.3})`;
+    ctx.beginPath(); ctx.arc(sx, sy, 2 + Math.sin(t * 4 + i) * 1.5, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // base emoji A (larger, center)
+  ctx.font = `${S * 0.58}px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = 'rgba(0,0,0,0.3)'; ctx.shadowBlur = 8;
+  ctx.fillText(emojiA, cx, cy + S * 0.04);
+  ctx.shadowBlur = 0;
+
+  // overlay emoji B (smaller, top-right, rotated -20deg)
+  ctx.save();
+  ctx.translate(cx + S * 0.24, cy - S * 0.24);
+  ctx.rotate(-0.35);
+  ctx.font = `${S * 0.34}px serif`;
+  ctx.shadowColor = 'rgba(255,255,255,0.8)'; ctx.shadowBlur = 12;
+  ctx.fillText(emojiB, 0, 0);
+  ctx.restore();
+  ctx.shadowBlur = 0;
+
+  // plus sparkle between them
+  ctx.fillStyle = '#ffd93d';
+  ctx.font = `${S * 0.12}px sans-serif`;
+  ctx.fillText('✦', cx - S * 0.05, cy - S * 0.18);
+}
+
+// animated fusion visual loop
+let fusionAnimId = null;
+function animateFusionVisual(emojiA, emojiB) {
+  const canvas = document.getElementById('result-emoji');
+  if (fusionAnimId) cancelAnimationFrame(fusionAnimId);
+  function loop() {
+    drawFusionVisual(canvas, emojiA, emojiB);
+    fusionAnimId = requestAnimationFrame(loop);
+  }
+  loop();
+}
+
 // ===== Result popup =====
-const popup=document.getElementById('result-popup');
-function showResult(r){
-  document.getElementById('result-emoji').textContent=r.emoji;
-  document.getElementById('result-name').textContent=r.name;
-  document.getElementById('result-desc').textContent=r.desc;
+const popup = document.getElementById('result-popup');
+function showResult(r) {
+  const a = itemMap[r.ra], b = itemMap[r.rb];
+  animateFusionVisual(a.emoji, b.emoji);
+  document.getElementById('result-name').textContent = r.name;
+  document.getElementById('result-desc').textContent = r.desc;
   popup.classList.add('show');
 }
-document.getElementById('res-close').onclick=()=>popup.classList.remove('show');
+document.getElementById('res-close').onclick=()=>{popup.classList.remove('show');if(fusionAnimId){cancelAnimationFrame(fusionAnimId);fusionAnimId=null}};
 document.getElementById('res-copy').onclick=()=>{
   const r=state.result;if(!r)return;
-  const txt=`🧬 ${r.emoji} ${r.name}\n${r.desc}\n融合配方：${itemMap[r.ra].name} + ${itemMap[r.rb].name}\n#EverythingFusion`;
+  const a=itemMap[r.ra],b=itemMap[r.rb];
+  const txt=`🧬 ${a.emoji} + ${b.emoji} = ${r.name}\n${r.desc}\n融合配方：${a.name} + ${b.name}\n#EverythingFusion`;
   navigator.clipboard.writeText(txt).then(()=>toast('📋 已复制到剪贴板')).catch(()=>{
     const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();toast('📋 已复制');
   });
@@ -488,19 +565,24 @@ function renderAlbum(){
   let arr=[...state.album];
   if(state.sort==='fun')arr.sort((a,b)=>b.fun-a.fun);
   if(arr.length===0){list.innerHTML='<div style="color:#888;text-align:center;padding:30px">还没有融合配方<br>快去试试吧！</div>';return}
-  list.innerHTML=arr.map(r=>`
+  list.innerHTML=arr.map(r=>{
+    const a=itemMap[r.ra],b=itemMap[r.rb];
+    return`
     <div class="recipe-card" data-time="${r.time}">
       <div class="recipe-top">
-        <span class="recipe-emoji">${r.emoji}</span>
+        <span class="recipe-emoji" style="position:relative;display:inline-block;width:40px;height:40px">
+          <span style="font-size:28px">${a?a.emoji:'❓'}</span>
+          <span style="font-size:18px;position:absolute;right:-6px;top:-4px">${b?b.emoji:'❓'}</span>
+        </span>
         <div>
           <div class="recipe-name">${r.name}</div>
-          <div class="recipe-meta"><span>${itemMap[r.ra]?.name||'?'} + ${itemMap[r.rb]?.name||'?'}</span><span>有趣度 ${r.fun}/10</span></div>
+          <div class="recipe-meta"><span>${a?a.name:'?'} + ${b?b.name:'?'}</span><span>有趣度 ${r.fun}/10</span></div>
         </div>
       </div>
       <div class="recipe-desc">${r.desc}</div>
       ${r.note?`<div class="recipe-note">📝 ${r.note}</div>`:''}
     </div>
-  `).join('');
+  `}).join('');
   // long press to add note
   list.querySelectorAll('.recipe-card').forEach(card=>{
     let t;
@@ -559,7 +641,8 @@ document.getElementById('btn-reset').onclick=()=>{
 document.getElementById('share-float').onclick=()=>{
   if(state.album.length===0){toast('还没有融合可以分享');return}
   const r=state.album[0];
-  const txt=`🧬 ${r.emoji} ${r.name}\n${r.desc}\n${itemMap[r.ra]?.name} + ${itemMap[r.rb]?.name} = ${r.name}\n有趣度 ${r.fun}/10\n#EverythingFusion #BrainwaveMix`;
+  const a=itemMap[r.ra],b=itemMap[r.rb];
+  const txt=`🧬 ${a.emoji} + ${b.emoji} = ${r.name}\n${r.desc}\n有趣度 ${r.fun}/10\n#EverythingFusion #BrainwaveMix`;
   navigator.clipboard.writeText(txt).then(()=>toast('📋 融合配方已复制')).catch(()=>toast('复制失败'));
 };
 
@@ -586,10 +669,6 @@ function updateTut(){
 }
 if(localStorage.getItem('efw_tut'))tutModal.classList.remove('show');
 updateTut();
-
-// mouse support for drag ghost
-document.addEventListener('mousemove',e=>{if(draggingItem){dragGhost.style.left=e.clientX+'px';dragGhost.style.top=e.clientY+'px'}});
-document.addEventListener('mouseup',e=>{if(draggingItem){handleDrop(e.clientX,e.clientY);dragGhost.style.display='none';draggingItem=null}});
 
 })();
 </script>
