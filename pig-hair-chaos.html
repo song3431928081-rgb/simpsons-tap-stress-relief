@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Pig Hair Chaos · 茶杯猪发型大混乱</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+html,body{width:100%;height:100%;overflow:hidden;background:#a8d8f0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;touch-action:none}
+#wrap{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+#hud{position:fixed;top:env(safe-area-inset-top,12px);left:0;right:0;display:flex;justify-content:space-between;padding:10px 14px;z-index:5;pointer-events:none}
+.chaos-wrap{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.55);padding:6px 10px;border-radius:20px;backdrop-filter:blur(6px)}
+.chaos-bar{width:80px;height:10px;background:rgba(0,0,0,.12);border-radius:6px;overflow:hidden}
+.chaos-fill{height:100%;width:0;background:linear-gradient(90deg,#ff9f43,#ee5a24,#ff6b81);border-radius:6px;transition:width .12s}
+.chaos-label{font-size:11px;font-weight:700;color:#444}
+#share-btn{pointer-events:auto;background:rgba(255,255,255,.7);border:none;padding:7px 14px;border-radius:18px;font-size:12px;font-weight:700;color:#333;cursor:pointer;backdrop-filter:blur(6px)}
+#tools{position:fixed;bottom:env(safe-area-inset-bottom,18px);left:0;right:0;display:flex;justify-content:center;gap:14px;z-index:5;padding-bottom:8px}
+.tool{width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,.75);border:2px solid rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center;font-size:22px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.12);transition:transform .15s;backdrop-filter:blur(8px)}
+.tool:active{transform:scale(.88)}
+#toast{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.7);color:#fff;padding:12px 22px;border-radius:14px;font-size:14px;z-index:10;opacity:0;pointer-events:none;transition:opacity .3s}
+#toast.show{opacity:1}
+.flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:8}
+.tag{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#ff6b81,#ee5a24);color:#fff;padding:6px 16px;border-radius:20px;font-size:12px;font-weight:700;z-index:6;opacity:0;transition:opacity .3s}
+.tag.show{opacity:1}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c"></canvas>
+</div>
+<div id="hud">
+  <div class="chaos-wrap">
+    <span class="chaos-label">CHAOS</span>
+    <div class="chaos-bar"><div class="chaos-fill" id="chaosFill"></div></div>
+  </div>
+  <button id="share-btn">📤 分享</button>
+</div>
+<div id="tools">
+  <div class="tool" id="t-comb" title="换发型">🪮</div>
+  <div class="tool" id="t-mirror" title="截图">🪞</div>
+  <div class="tool" id="t-sound" title="音效">🔊</div>
+  <div class="tool" id="t-filter" title="滤镜">✨</div>
+  <div class="tool" id="t-bg" title="背景">🎨</div>
+</div>
+<div class="flash" id="flash"></div>
+<div class="tag" id="tag">#PigHairChaos</div>
+<div id="toast"></div>
+<script>
+(()=>{
+'use strict';
+const C=document.getElementById('c');
+const ctx=C.getContext('2d');
+const W=()=>C.width,H=()=>C.height;
+let DPR=Math.min(window.devicePixelRatio||1,3);
+
+function resize(){
+  DPR=Math.min(window.devicePixelRatio||1,3);
+  C.width=innerWidth*DPR;
+  C.height=innerHeight*DPR;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+resize();
+addEventListener('resize',resize);
+
+// ===== Audio =====
+let AC=null;
+function ac(){if(!AC)AC=new (window.AudioContext||window.webkitAudioContext)();return AC}
+let soundOn=true;
+function beep(freq,dur,type='sine',vol=.3,slide=0){
+  if(!soundOn)return;
+  const a=ac();const o=a.createOscillator();const g=a.createGain();
+  o.type=type;o.frequency.value=freq;
+  if(slide)o.frequency.exponentialRampToValueAtTime(Math.max(30,freq+slide),a.currentTime+dur);
+  g.gain.value=vol;g.gain.exponentialRampToValueAtTime(.001,a.currentTime+dur);
+  o.connect(g);g.connect(a.destination);o.start();o.stop(a.currentTime+dur);
+}
+function oink(){if(!soundOn)return;const a=ac();const o=a.createOscillator();const g=a.createGain();
+  o.type='sawtooth';o.frequency.value=180;o.frequency.exponentialRampToValueAtTime(120,a.currentTime+.15);
+  g.gain.value=.25;g.gain.exponentialRampToValueAtTime(.001,a.currentTime+.18);
+  o.connect(g);g.connect(a.destination);o.start();o.stop(a.currentTime+.18)}
+function pop(){beep(600,.08,'square',.35,-400)}
+function boing(){if(!soundOn)return;const a=ac();const o=a.createOscillator();const g=a.createGain();
+  o.type='sine';o.frequency.value=200;o.frequency.exponentialRampToValueAtTime(800,a.currentTime+.12);
+  g.gain.value=.2;g.gain.exponentialRampToValueAtTime(.001,a.currentTime+.15);
+  o.connect(g);g.connect(a.destination);o.start();o.stop(a.currentTime+.15)}
+function explosion(){if(!soundOn)return;const a=ac();
+  for(let i=0;i<8;i++){const o=a.createOscillator();const g=a.createGain();
+    o.type='sawtooth';o.frequency.value=100+Math.random()*400;
+    g.gain.value=.15;g.gain.exponentialRampToValueAtTime(.001,a.currentTime+.3+i*.04);
+    o.connect(g);g.connect(a.destination);o.start();o.stop(a.currentTime+.3+i*.04)}
+  oink();oink();}
+// Ukulele-ish background loop
+let musicNodes=[];
+function startMusic(){
+  if(!soundOn)return;
+  stopMusic();
+  const a=ac();const notes=[523,659,784,659,523,587,659,587];// C E G E C D E D
+  notes.forEach((f,i)=>{
+    const o=a.createOscillator();const g=a.createGain();
+    o.type='triangle';o.frequency.value=f;
+    const t=a.currentTime+i*.25;
+    g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.06,t+.02);g.gain.exponentialRampToValueAtTime(.001,t+.22);
+    o.connect(g);g.connect(a.destination);o.start(t);o.stop(t+.25);
+    musicNodes.push(o);
+  });
+  setTimeout(()=>{if(soundOn)startMusic()},notes.length*250);
+}
+function stopMusic(){musicNodes.forEach(o=>{try{o.stop()}catch(e){}});musicNodes=[]}
+
+// ===== Game State =====
+const HAIR_STYLES=['bob','buns','curly','afro','bun'];
+const styleNames={'bob':'波波头','buns':'粉色双髻','curly':'卷发','afro':'非洲式','bun':'发髻'};
+const state={
+  hairStyle:'bob',
+  chaos:0,
+  explosion:false,
+  explosionT:0,
+  filterMode:0,
+  bgMode:0,
+  particles:[],
+  textLabel:'',
+  textT:0,
+  frozen:false,
+  frozenImg:null,
+  bgParticles:[],
+};
+
+const BGS=['#a8d8f0','#ffd6e7'];
+
+// Pig face center and size (relative, computed each frame)
+function getPig(){
+  const w=innerWidth,h=innerHeight;
+  const cx=w/2, cy=h*0.52;
+  const r=Math.min(w,h)*0.26;
+  return{cx,cy,r};
+}
+
+// Hair physics: array of control points with spring physics
+let hairPoints=[];
+function initHair(){
+  hairPoints=[];
+  const p=getPig();
+  const N=40;
+  for(let i=0;i<N;i++){
+    const t=i/(N-1);
+    const ang=-Math.PI/2+(t-.5)*Math.PI*0.9;
+    const baseX=p.cx+Math.cos(ang)*p.r*.85;
+    const baseY=p.cy-Math.abs(Math.sin(ang))*p.r*.4;
+    hairPoints.push({x:baseX,y:baseY,bx:baseX,by:baseY,vx:0,vy:0,rest:0});
+  }
+}
+initHair();
+
+// Distortion params
+let dragX=0,dragY=0,dragging=false,holdT=0;
+let swirlAng=0;
+
+// Input
+let lastTouch=null;
+function getPos(e){
+  const t=e.touches?e.touches[0]:e;
+  return{x:t.clientX,y:t.clientY};
+}
+function onDown(e){
+  e.preventDefault();
+  const a=ac();if(a.state==='suspended')a.resume();
+  dragging=true;holdT=0;
+  const pos=getPos(e);lastTouch=pos;
+  const p=getPig();
+  const dx=pos.x-p.cx,dy=pos.y-p.cy;
+  if(Math.hypot(dx,dy)<p.r*1.6){
+    applyDisturbance(pos.x,pos.y,18);
+    pop();
+    state.chaos=Math.min(1,state.chaos+.04);
+  }
+}
+function onMove(e){
+  e.preventDefault();
+  if(!dragging)return;
+  const pos=getPos(e);
+  if(lastTouch){
+    const dx=pos.x-lastTouch.x,dy=pos.y-lastTouch.y;
+    applyDisturbance(pos.x,pos.y,Math.min(30,Math.hypot(dx,dy)*1.5));
+    if(Math.hypot(dx,dy)>2){
+      state.chaos=Math.min(1,state.chaos+.012);
+      boing();
+    }
+  }
+  lastTouch=pos;
+}
+function onUp(e){dragging=false;lastTouch=null}
+C.addEventListener('touchstart',onDown,{passive:false});
+C.addEventListener('touchmove',onMove,{passive:false});
+C.addEventListener('touchend',onUp);
+C.addEventListener('mousedown',onDown);
+addEventListener('mousemove',onMove);
+addEventListener('mouseup',onUp);
+
+function applyDisturbance(x,y,strength){
+  hairPoints.forEach(pt=>{
+    const dx=pt.x-x,dy=pt.y-y;
+    const d=Math.hypot(dx,dy);
+    if(d<200){
+      const f=(1-d/200)*strength*0.4;
+      const ang=Math.atan2(dy,dx);
+      pt.vx+=Math.cos(ang)*f*0.3+(Math.random()-.5)*f*0.5;
+      pt.vy+=Math.sin(ang)*f*0.3+(Math.random()-.5)*f*0.5;
+    }
+  });
+  // face squish
+  const p=getPig();
+  const d=Math.hypot(x-p.cx,y-p.cy);
+  if(d<p.r*1.8){
+    state.squish=Math.min(1,(1-d/(p.r*1.8))*0.5);
+    state.squishX=x<p.cx?1:-1;
+  }
+  // particles
+  if(Math.random()<0.4){
+    state.particles.push({x,y,vx:(Math.random()-.5)*4,vy:(Math.random()-.5)*4-1,life:1,size:3+Math.random()*4});
+  }
+}
+state.squish=0;
+
+// update hair physics
+function updateHair(){
+  const p=getPig();
+  const N=hairPoints.length;
+  for(let i=0;i<N;i++){
+    const pt=hairPoints[i];
+    const t=i/(N-1);
+    const ang=-Math.PI/2+(t-.5)*Math.PI*0.9;
+    const targetX=p.cx+Math.cos(ang)*p.r*.85;
+    const targetY=p.cy-Math.abs(Math.sin(ang))*p.r*.4;
+    // spring
+    pt.vx+=(targetX-pt.x)*0.06;
+    pt.vy+=(targetY-pt.y)*0.06;
+    // damping
+    pt.vx*=0.82;pt.vy*=0.82;
+    pt.x+=pt.vx;pt.y+=pt.vy;
+  }
+  // explosion
+  if(state.explosion){
+    state.explosionT+=1;
+    if(state.explosionT>120){state.explosion=false;state.explosionT=0}
+  }
+  state.squish*=0.9;
+  if(state.textT>0)state.textT--;
+}
+
+// ===== Drawing =====
+function drawPig(){
+  const p=getPig();
+  const sq=state.squish;
+  const sqX=state.squishX||1;
+  ctx.save();
+  ctx.translate(p.cx,p.cy);
+  ctx.scale(1+sq*sqX*0.15,1-sq*0.1);
+  
+  // face
+  ctx.fillStyle='#f7c8d8';
+  ctx.beginPath();ctx.ellipse(0,0,p.r,p.r*0.92,0,0,Math.PI*2);ctx.fill();
+  
+  // ears
+  ctx.fillStyle='#f0a8c0';
+  ctx.beginPath();ctx.ellipse(-p.r*.7,-p.r*.55,p.r*.22,p.r*.3,-.4,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.ellipse(p.r*.7,-p.r*.55,p.r*.22,p.r*.3,.4,0,Math.PI*2);ctx.fill();
+  
+  // cheeks
+  ctx.fillStyle='rgba(255,150,180,.5)';
+  ctx.beginPath();ctx.ellipse(-p.r*.45,p.r*.2,p.r*.18,p.r*.12,0,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.ellipse(p.r*.45,p.r*.2,p.r*.18,p.r*.12,0,0,Math.PI*2);ctx.fill();
+  
+  // eyes
+  ctx.fillStyle='#3a2a2a';
+  ctx.beginPath();ctx.arc(-p.r*.28,-p.r*.15,p.r*.08,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(p.r*.28,-p.r*.15,p.r*.08,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#fff';
+  ctx.beginPath();ctx.arc(-p.r*.26,-p.r*.17,p.r*.025,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(p.r*.30,-p.r*.17,p.r*.025,0,Math.PI*2);ctx.fill();
+  
+  // snout
+  ctx.fillStyle='#e898b0';
+  ctx.beginPath();ctx.ellipse(0,p.r*.2,p.r*.32,p.r*.24,0,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#c87890';
+  ctx.beginPath();ctx.ellipse(-p.r*.1,p.r*.2,p.r*.05,p.r*.07,0,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.ellipse(p.r*.1,p.r*.2,p.r*.05,p.r*.07,0,0,Math.PI*2);ctx.fill();
+  
+  // mouth
+  ctx.strokeStyle='#a85870';ctx.lineWidth=2;ctx.lineCap='round';
+  ctx.beginPath();ctx.arc(0,p.r*.42,p.r*.12,.1,Math.PI-.1);ctx.stroke();
+  
+  ctx.restore();
+}
+
+function drawHair(){
+  const p=getPig();
+  const exp=state.explosion?Math.sin(state.explosionT*.3)*0.5+0.5:0;
+  ctx.save();
+  
+  switch(state.hairStyle){
+    case 'bob': drawBob(p,exp);break;
+    case 'buns': drawBuns(p,exp);break;
+    case 'curly': drawCurly(p,exp);break;
+    case 'afro': drawAfro(p,exp);break;
+    case 'bun': drawBun(p,exp);break;
+  }
+  ctx.restore();
+}
+
+function drawBob(p,exp){
+  // wiggle based on hairPoints
+  const pts=hairPoints;
+  ctx.fillStyle='#6b4423';
+  ctx.strokeStyle='#4a2f18';ctx.lineWidth=2;
+  // main hair mass
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x,pts[0].y);
+  for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);
+  // bottom of bob
+  for(let i=pts.length-1;i>=0;i--){
+    const t=i/(pts.length-1);
+    ctx.lineTo(pts[i].x+(Math.sin(t*Math.PI)*exp*80),pts[i].y+p.r*0.3+(1-exp)*0);
+  }
+  ctx.closePath();ctx.fill();ctx.stroke();
+  // fringe
+  ctx.fillStyle='#5a3a1c';
+  ctx.beginPath();
+  ctx.ellipse(p.cx,p.cy-p.r*.75,p.r*.7,p.r*.18+exp*30,0,0,Math.PI*2);
+  ctx.fill();
+}
+
+function drawBuns(p,exp){
+  // two buns on top
+  ctx.fillStyle='#ff9ec7';
+  ctx.strokeStyle='#d97aa0';ctx.lineWidth=2;
+  const leftBun={x:p.cx-p.r*.5,y:p.cy-p.r*.9-exp*20,r:p.r*.28+exp*30};
+  const rightBun={x:p.cx+p.r*.5,y:p.cy-p.r*.9-exp*20,r:p.r*.28+exp*30};
+  ctx.beginPath();ctx.arc(leftBun.x,leftBun.y,leftBun.r,0,Math.PI*2);ctx.fill();ctx.stroke();
+  ctx.beginPath();ctx.arc(rightBun.x,rightBun.y,rightBun.r,0,Math.PI*2);ctx.fill();ctx.stroke();
+  // connecting hair
+  ctx.fillStyle='#e888b0';
+  ctx.beginPath();
+  ctx.ellipse(p.cx,p.cy-p.r*.6,p.r*.6,p.r*.2,0,0,Math.PI*2);
+  ctx.fill();
+}
+
+function drawCurly(p,exp){
+  ctx.fillStyle='#8b5a2b';
+  const pts=hairPoints;
+  for(let i=0;i<pts.length;i+=2){
+    const pt=pts[i];
+    const r=p.r*(0.12+exp*0.15)+Math.random()*4;
+    ctx.beginPath();ctx.arc(pt.x,pt.y,r,0,Math.PI*2);ctx.fill();
+  }
+  // top curls
+  for(let i=0;i<8;i++){
+    const ang=-Math.PI/2+(i/7-0.5)*Math.PI*0.7;
+    const x=p.cx+Math.cos(ang)*p.r*(0.5+exp*0.6);
+    const y=p.cy+Math.sin(ang)*p.r*0.6-exp*30;
+    ctx.beginPath();ctx.arc(x,y,p.r*(0.1+exp*0.1),0,Math.PI*2);ctx.fill();
+  }
+}
+
+function drawAfro(p,exp){
+  ctx.fillStyle='#2a1a0a';
+  const cx=p.cx,cy=p.cy-p.r*.3;
+  const rx=p.r*(0.9+exp*0.6),ry=p.r*(0.85+exp*0.5);
+  ctx.beginPath();
+  for(let i=0;i<=60;i++){
+    const ang=i/60*Math.PI*2;
+    const wobble=Math.sin(ang*5+Date.now()*.003)*8*(1+exp);
+    const x=cx+Math.cos(ang)*(rx+wobble);
+    const y=cy+Math.sin(ang)*(ry+wobble);
+    if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+  }
+  ctx.closePath();ctx.fill();
+  // highlight
+  ctx.fillStyle='rgba(255,200,100,.15)';
+  ctx.beginPath();ctx.ellipse(cx-p.r*.2,cy-p.r*.3,p.r*.3,p.r*.2,-.3,0,Math.PI*2);ctx.fill();
+}
+
+function drawBun(p,exp){
+  // single bun on top
+  ctx.fillStyle='#c89060';
+  ctx.strokeStyle='#9a6838';ctx.lineWidth=2;
+  const bunY=p.cy-p.r*1.0-exp*40;
+  const bunR=p.r*(0.35+exp*0.5);
+  // hair going up
+  ctx.fillStyle='#b88050';
+  ctx.beginPath();
+  ctx.moveTo(p.cx-p.r*.5,p.cy-p.r*.5);
+  ctx.quadraticCurveTo(p.cx-p.r*.3,p.cy-p.r*.85,p.cx-p.r*.15,bunY);
+  ctx.lineTo(p.cx+p.r*.15,bunY);
+  ctx.quadraticCurveTo(p.cx+p.r*.3,p.cy-p.r*.85,p.cx+p.r*.5,p.cy-p.r*.5);
+  ctx.closePath();ctx.fill();
+  // bun
+  ctx.fillStyle='#c89060';
+  ctx.beginPath();ctx.arc(p.cx,bunY,bunR,0,Math.PI*2);ctx.fill();ctx.stroke();
+  // bun swirl
+  ctx.strokeStyle='#9a6838';ctx.lineWidth=2;
+  ctx.beginPath();
+  for(let a=0;a<Math.PI*4;a+=.2){
+    const rr=a*bunR*0.12;
+    const x=p.cx+Math.cos(a)*rr,y=bunY+Math.sin(a)*rr;
+    if(a===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+}
+
+// particles
+function updateParticles(){
+  state.particles=state.particles.filter(pt=>pt.life>0);
+  state.particles.forEach(pt=>{
+    pt.x+=pt.vx;pt.y+=pt.vy;pt.vy+=0.1;pt.life-=0.02;pt.size*=0.98;
+  });
+  state.bgParticles=state.bgParticles.filter(pt=>pt.life>0);
+  state.bgParticles.forEach(pt=>{
+    pt.x+=pt.vx;pt.y+=pt.vy;pt.life-=0.008;
+  });
+}
+function drawParticles(){
+  state.particles.forEach(pt=>{
+    ctx.globalAlpha=pt.life;
+    ctx.fillStyle=state.bgMode?'#ff88aa':'#fff';
+    ctx.beginPath();ctx.arc(pt.x,pt.y,pt.size,0,Math.PI*2);ctx.fill();
+  });
+  ctx.globalAlpha=1;
+  state.bgParticles.forEach(pt=>{
+    ctx.globalAlpha=pt.life*0.6;
+    ctx.fillStyle=state.bgMode?'#ffb3d1':'#cfe8f5';
+    ctx.beginPath();ctx.arc(pt.x,pt.y,pt.size,0,Math.PI*2);ctx.fill();
+  });
+  ctx.globalAlpha=1;
+}
+
+// background particles (floating hair)
+function spawnBgParticles(){
+  if(Math.random()<0.3){
+    state.bgParticles.push({
+      x:Math.random()*innerWidth,
+      y:innerHeight+10,
+      vx:(Math.random()-.5)*0.5,
+      vy:-1-Math.random()*1.5,
+      life:1,
+      size:3+Math.random()*6
+    });
+  }
+}
+
+// ===== Filters =====
+function applyFilter(){
+  if(state.filterMode===0)return;
+  const img=ctx.getImageData(0,0,C.width,C.height);
+  const d=img.data;
+  if(state.filterMode===1){// rainbow
+    for(let i=0;i<d.length;i+=4){
+      d[i]=(d[i]+80)%256;
+      d[i+1]=(d[i+1]+120)%256;
+      d[i+2]=(d[i+2]+60)%256;
+    }
+  }else if(state.filterMode===2){// sparkle/brightness
+    for(let i=0;i<d.length;i+=4){
+      d[i]=Math.min(255,d[i]*1.2+30);
+      d[i+1]=Math.min(255,d[i+1]*1.2+30);
+      d[i+2]=Math.min(255,d[i+2]*1.2+30);
+    }
+  }else if(state.filterMode===3){// warm pink
+    for(let i=0;i<d.length;i+=4){
+      d[i]=Math.min(255,d[i]*1.1+20);
+      d[i+2]=Math.min(255,d[i+2]*0.85);
+    }
+  }
+  ctx.putImageData(img,0,0);
+}
+
+// ===== Render loop =====
+function render(){
+  const w=innerWidth,h=innerHeight;
+  // background
+  ctx.fillStyle=BGS[state.bgMode];
+  ctx.fillRect(0,0,w,h);
+  
+  if(state.frozen&&state.frozenImg){
+    ctx.drawImage(state.frozenImg,0,0,w,h);
+  }else{
+    updateHair();
+    updateParticles();
+    spawnBgParticles();
+    
+    drawParticles();
+    drawHair();
+    drawPig();
+    
+    // explosion particles
+    if(state.explosion){
+      for(let i=0;i<3;i++){
+        const ang=Math.random()*Math.PI*2;
+        const sp=3+Math.random()*5;
+        state.particles.push({
+          x:getPig().cx+Math.cos(ang)*getPig().r*.5,
+          y:getPig().cy+Math.sin(ang)*getPig().r*.3,
+          vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp-2,
+          life:1,size:4+Math.random()*6
+        });
+      }
+    }
+    
+    applyFilter();
+    
+    // text overlay
+    if(state.textT>0&&state.textLabel){
+      ctx.save();
+      ctx.globalAlpha=Math.min(1,state.textT/30);
+      ctx.font='bold '+Math.min(w,h)*0.08+'px sans-serif';
+      ctx.textAlign='center';
+      ctx.fillStyle='#fff';
+      ctx.strokeStyle='#000';ctx.lineWidth=4;
+      ctx.strokeText(state.textLabel,w/2,h*0.18);
+      ctx.fillText(state.textLabel,w/2,h*0.18);
+      ctx.restore();
+    }
+  }
+  
+  // chaos bar
+  document.getElementById('chaosFill').style.width=(state.chaos*100)+'%';
+  
+  requestAnimationFrame(render);
+}
+render();
+
+// ===== Tools =====
+document.getElementById('t-comb').addEventListener('click',()=>{
+  const idx=HAIR_STYLES.indexOf(state.hairStyle);
+  state.hairStyle=HAIR_STYLES[(idx+1)%HAIR_STYLES.length];
+  toast('🪮 发型：'+styleNames[state.hairStyle]);
+  boing();
+  state.chaos=Math.min(1,state.chaos+.1);
+});
+document.getElementById('t-mirror').addEventListener('click',()=>{
+  if(state.frozen){
+    state.frozen=false;state.frozenImg=null;
+    toast('🪞 取消冻结');
+  }else{
+    state.frozenImg=new Image();
+    state.frozenImg.src=C.toDataURL('image/png');
+    state.frozenImg.onload=()=>{
+      state.frozen=true;
+      toast('🪞 已冻结！点击下载截图');
+      // auto download
+      const a=document.createElement('a');
+      a.download='pig-hair-chaos-'+Date.now()+'.png';
+      a.href=C.toDataURL('image/png');
+      a.click();
+    };
+  }
+});
+document.getElementById('t-sound').addEventListener('click',()=>{
+  soundOn=!soundOn;
+  if(soundOn){toast('🔊 音效开');oink();startMusic()}
+  else{toast('🔇 音效关');stopMusic()}
+});
+document.getElementById('t-filter').addEventListener('click',()=>{
+  state.filterMode=(state.filterMode+1)%4;
+  const names=['无','🌈彩虹','✨闪光','🌸暖粉'];
+  toast('滤镜：'+names[state.filterMode]);
+  if(state.filterMode>0)pop();
+});
+document.getElementById('t-bg').addEventListener('click',()=>{
+  state.bgMode=1-state.bgMode;
+  toast(state.bgMode?'🌸 粉色背景':'💙 蓝色背景');
+});
+document.getElementById('share-btn').addEventListener('click',()=>{
+  const tag=document.getElementById('tag');
+  tag.classList.add('show');
+  // flash
+  const flash=document.getElementById('flash');
+  flash.style.opacity='0.6';
+  setTimeout(()=>flash.style.opacity='0',200);
+  // download
+  const a=document.createElement('a');
+  a.download='PigHairChaos-'+Date.now()+'.png';
+  a.href=C.toDataURL('image/png');
+  a.click();
+  toast('📸 已保存！#PigHairChaos');
+  setTimeout(()=>tag.classList.remove('show'),2500);
+});
+
+// chaos explosion check
+setInterval(()=>{
+  if(state.chaos>=1&&!state.explosion){
+    state.explosion=true;state.explosionT=0;
+    explosion();
+    const labels=['小猪公主','混沌女王','爆炸头','发型大师','猪猪风暴'];
+    state.textLabel=labels[Math.floor(Math.random()*labels.length)];
+    state.textT=120;
+    toast('💥 头发爆炸模式！');
+    setTimeout(()=>{state.chaos=0},2000);
+  }
+  // decay chaos
+  if(!state.explosion)state.chaos=Math.max(0,state.chaos-0.003);
+},100);
+
+// toast
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t=setTimeout(()=>t.classList.remove('show'),1500);
+}
+
+// start music on first interaction
+document.addEventListener('touchstart',()=>{if(soundOn&&musicNodes.length===0)startMusic()},{once:true});
+document.addEventListener('mousedown',()=>{if(soundOn&&musicNodes.length===0)startMusic()},{once:true});
+
+})();
+</script>
+</body>
+</html>
