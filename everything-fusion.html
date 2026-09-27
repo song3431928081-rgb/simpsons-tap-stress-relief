@@ -148,30 +148,41 @@ function sndCackle(){[400,350,450,300].forEach((f,i)=>setTimeout(()=>tone(f,.1,'
 function sndUnlock(){[330,392,440,523].forEach((f,i)=>setTimeout(()=>tone(f,.2,'triangle',.22),i*100))}
 
 // ===== Data: Halloween items =====
+// kind: 'face' = creature/living (provides the face features)
+//       'body' = inanimate object (provides the body shape)
 const BASE_ITEMS=[
-  {id:'pumpkin',emoji:'🎃',name:'Pumpkin',desc:'A grinning jack-o-lantern with a fiery glow'},
-  {id:'ghost',emoji:'👻',name:'Ghost',desc:'Boo! A friendly floating spirit'},
-  {id:'bat',emoji:'🦇',name:'Bat',desc:'Flutters through the midnight sky'},
-  {id:'vampire',emoji:'🧛',name:'Vampire',desc:'Vants to suck your blood... politely'},
-  {id:'zombie',emoji:'🧟',name:'Zombie',desc:'Braaaains... and maybe a snack'},
-  {id:'spider',emoji:'🕷️',name:'Spider',desc:'Weaves spooky webs in dark corners'},
-  {id:'candy',emoji:'🍬',name:'Candy',desc:'Trick or treat sugar rush'},
-  {id:'moon',emoji:'🌙',name:'Moon',desc:'A crescent that watches over the night'},
-  {id:'candle',emoji:'🕯️',name:'Candle',desc:'Flickers with an eerie orange flame'},
-  {id:'skull',emoji:'💀',name:'Skull',desc:'Dead but still judging you'},
-  {id:'witch',emoji:'🧙',name:'Witch',desc:'Cackles while brewing potions'},
-  {id:'bone',emoji:'🦴',name:'Bone',desc:'A leftover from... something'},
-  {id:'crystal',emoji:'🔮',name:'Crystal Ball',desc:'Sees all your spooky secrets'},
-  {id:'tombstone',emoji:'🪦',name:'Tombstone',desc:'R.I.P. Your Halloween candy'},
-  {id:'mask',emoji:'🎭',name:'Mask',desc:'Hides a terrifyingly cute face'},
-  {id:'coffin',emoji:'⚰️',name:'Coffin',desc:'Comfortable with a silk lining'},
-  {id:'owl',emoji:'🦉',name:'Owl',desc:'Hoots at midnight, knows too much',locked:true},
-  {id:'broom',emoji:'🧹',name:'Broom',desc:'A witch\'s loyal ride',locked:true},
-  {id:'blackcat',emoji:'🐈‍⬛',name:'Black Cat',desc:'Crosses your path for luck',locked:true},
-  {id:'cauldron',emoji:'🫕',name:'Cauldron',desc:'Bubbling with mysterious brew',locked:true},
-  {id:'scythe',emoji:'⚒️',name:'Scythe',desc:'Grim but oddly fashionable',locked:true},
+  {id:'pumpkin',emoji:'🎃',name:'Pumpkin',desc:'A grinning jack-o-lantern with a fiery glow',kind:'body'},
+  {id:'ghost',emoji:'👻',name:'Ghost',desc:'Boo! A friendly floating spirit',kind:'face'},
+  {id:'bat',emoji:'🦇',name:'Bat',desc:'Flutters through the midnight sky',kind:'face'},
+  {id:'vampire',emoji:'🧛',name:'Vampire',desc:'Vants to suck your blood... politely',kind:'face'},
+  {id:'zombie',emoji:'🧟',name:'Zombie',desc:'Braaaains... and maybe a snack',kind:'face'},
+  {id:'spider',emoji:'🕷️',name:'Spider',desc:'Weaves spooky webs in dark corners',kind:'face'},
+  {id:'candy',emoji:'🍬',name:'Candy',desc:'Trick or treat sugar rush',kind:'body'},
+  {id:'moon',emoji:'🌙',name:'Moon',desc:'A crescent that watches over the night',kind:'face'},
+  {id:'candle',emoji:'🕯️',name:'Candle',desc:'Flickers with an eerie orange flame',kind:'body'},
+  {id:'skull',emoji:'💀',name:'Skull',desc:'Dead but still judging you',kind:'face'},
+  {id:'witch',emoji:'🧙',name:'Witch',desc:'Cackles while brewing potions',kind:'face'},
+  {id:'bone',emoji:'🦴',name:'Bone',desc:'A leftover from... something',kind:'body'},
+  {id:'crystal',emoji:'🔮',name:'Crystal Ball',desc:'Sees all your spooky secrets',kind:'body'},
+  {id:'tombstone',emoji:'🪦',name:'Tombstone',desc:'R.I.P. Your Halloween candy',kind:'body'},
+  {id:'mask',emoji:'🎭',name:'Mask',desc:'Hides a terrifyingly cute face',kind:'face'},
+  {id:'coffin',emoji:'⚰️',name:'Coffin',desc:'Comfortable with a silk lining',kind:'body'},
+  {id:'owl',emoji:'🦉',name:'Owl',desc:'Hoots at midnight, knows too much',kind:'face',locked:true},
+  {id:'broom',emoji:'🧹',name:'Broom',desc:'A witch\'s loyal ride',kind:'body',locked:true},
+  {id:'blackcat',emoji:'🐈‍⬛',name:'Black Cat',desc:'Crosses your path for luck',kind:'face',locked:true},
+  {id:'cauldron',emoji:'🫕',name:'Cauldron',desc:'Bubbling with mysterious brew',kind:'body',locked:true},
+  {id:'scythe',emoji:'⚒️',name:'Scythe',desc:'Grim but oddly fashionable',kind:'body',locked:true},
 ];
 const itemMap={};BASE_ITEMS.forEach(i=>itemMap[i.id]=i);
+
+// Decide which item is the BODY (shape) and which is the FACE (features)
+function decideBodyFace(a,b){
+  // If one is body and one is face → body item is the shape, face item provides features
+  if(a.kind==='body'&&b.kind==='face')return{body:a,face:b};
+  if(b.kind==='body'&&a.kind==='face')return{body:b,face:a};
+  // Both body or both face → first is body, second is face overlay
+  return{body:a,face:b};
+}
 
 // ===== Fusion recipes (Halloween) =====
 const FUSION_RECIPES={
@@ -470,8 +481,10 @@ function render(){
 render();
 renderPool();
 
-// ===== Fusion Visual: split-merge into ONE chimera (clip-based, reliable) =====
-function drawFusionVisual(canvas, emojiA, emojiB) {
+// ===== Fusion Visual: BODY (shape) + FACE (features) → one fused character =====
+// emojiBody = the item providing the main shape/body
+// emojiFace = the item whose face/features are overlaid onto the body
+function drawFusionVisual(canvas, emojiBody, emojiFace) {
   const ctx = canvas.getContext('2d');
   const S = 340;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -501,59 +514,57 @@ function drawFusionVisual(canvas, emojiA, emojiB) {
     ctx.beginPath(); ctx.arc(sx, sy, 2 + Math.sin(t * 4 + i) * 1.5, 0, Math.PI * 2); ctx.fill();
   }
 
-  // === Chimera: left half = A, right half = B, soft blended middle ===
-  const pulse = 1 + Math.sin(t * 2) * 0.035;
-  const fontSize = S * 0.62 * pulse;
-  const drawEmoji = (e, alpha) => {
-    ctx.globalAlpha = alpha;
-    ctx.font = `${fontSize}px serif`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 12;
-    ctx.fillText(e, cx, cy);
-    ctx.shadowBlur = 0;
-    ctx.globalAlpha = 1;
-  };
+  // gentle breathing pulse for the whole fused character
+  const pulse = 1 + Math.sin(t * 2) * 0.03;
 
-  const leftEdge = S * 0.38;   // A fully opaque left of this
-  const rightEdge = S * 0.62;  // B fully opaque right of this
-
-  // 1) Left zone: draw A (clipped to left 42%)
+  // === 1) Draw the BODY — large, centered, the main shape ===
+  const bodySize = S * 0.72 * pulse;
   ctx.save();
-  ctx.beginPath(); ctx.rect(0, 0, leftEdge, S); ctx.clip();
-  drawEmoji(emojiA, 1);
+  ctx.font = `${bodySize}px serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 16;
+  ctx.fillText(emojiBody, cx, cy + S * 0.02);
+  ctx.shadowBlur = 0;
   ctx.restore();
 
-  // 2) Middle blend zone (38%-62%): draw A at fading alpha + B at rising alpha
-  //    We approximate the soft gradient with a few sub-strips for smoothness
-  const strips = 8;
-  for (let i = 0; i < strips; i++) {
-    const x0 = leftEdge + (rightEdge - leftEdge) * (i / strips);
-    const x1 = leftEdge + (rightEdge - leftEdge) * ((i + 1) / strips);
-    const mid = (x0 + x1) / 2 / S;
-    const aAlpha = 1 - (mid - 0.38) / 0.24;   // A fades 1→0 across middle
-    const bAlpha = (mid - 0.38) / 0.24;       // B rises 0→1 across middle
-    ctx.save();
-    ctx.beginPath(); ctx.rect(x0, 0, x1 - x0, S); ctx.clip();
-    drawEmoji(emojiA, Math.max(0, aAlpha));
-    drawEmoji(emojiB, Math.max(0, bAlpha));
-    ctx.restore();
+  // === 2) Draw the FACE — smaller, overlaid on the body's "face zone" ===
+  //    Positioned slightly above center where a face naturally sits.
+  const faceSize = S * 0.38 * pulse;
+  const faceX = cx;
+  const faceY = cy - S * 0.06;   // face sits in the upper-middle of the body
+
+  // face glow halo (makes the face feel part of the body)
+  const faceGlow = ctx.createRadialGradient(faceX, faceY, 0, faceX, faceY, faceSize * 0.55);
+  faceGlow.addColorStop(0, 'rgba(255,220,120,0.35)');
+  faceGlow.addColorStop(1, 'rgba(255,220,120,0)');
+  ctx.fillStyle = faceGlow;
+  ctx.beginPath(); ctx.arc(faceX, faceY, faceSize * 0.55, 0, Math.PI * 2); ctx.fill();
+
+  // the face itself, with a subtle white outline so it reads on any body color
+  ctx.save();
+  ctx.font = `${faceSize}px serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  // draw a faint backing circle so the face is always legible
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.beginPath(); ctx.arc(faceX, faceY, faceSize * 0.42, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowColor = 'rgba(255,255,255,0.8)'; ctx.shadowBlur = 8;
+  ctx.fillText(emojiFace, faceX, faceY);
+  ctx.shadowBlur = 0;
+  ctx.restore();
+
+  // === 3) Floating sparkles around the fused character ===
+  for (let i = 0; i < 6; i++) {
+    const ang = t * 1.2 + (i / 6) * Math.PI * 2;
+    const r = S * 0.3 + Math.sin(t * 2 + i) * 8;
+    const px = cx + Math.cos(ang) * r;
+    const py = cy + Math.sin(ang) * r;
+    ctx.fillStyle = `rgba(255,215,0,${0.6 + Math.sin(t * 4 + i) * 0.3})`;
+    ctx.font = `${S * 0.05}px sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('✦', px, py);
   }
 
-  // 3) Right zone: draw B (clipped to right 42%)
-  ctx.save();
-  ctx.beginPath(); ctx.rect(rightEdge, 0, S - rightEdge, S); ctx.clip();
-  drawEmoji(emojiB, 1);
-  ctx.restore();
-
-  // soft golden seam glow down the middle
-  const seam = ctx.createLinearGradient(cx - S * 0.05, 0, cx + S * 0.05, 0);
-  seam.addColorStop(0, 'rgba(255,215,0,0)');
-  seam.addColorStop(0.5, `rgba(255,215,0,${0.3 + Math.sin(t * 3) * 0.12})`);
-  seam.addColorStop(1, 'rgba(255,215,0,0)');
-  ctx.fillStyle = seam;
-  ctx.fillRect(cx - S * 0.05, cy - S * 0.42, S * 0.1, S * 0.84);
-
-  // unified pulsing aura
+  // unified pulsing aura around the single fused character
   const auraR = S * 0.34 + Math.sin(t * 2.5) * 6;
   const aura = ctx.createRadialGradient(cx, cy, S * 0.12, cx, cy, auraR);
   aura.addColorStop(0, 'rgba(255,140,0,0)');
@@ -578,7 +589,8 @@ function animateFusionVisual(emojiA, emojiB) {
 const popup = document.getElementById('result-popup');
 function showResult(r) {
   const a = itemMap[r.ra], b = itemMap[r.rb];
-  animateFusionVisual(a.emoji, b.emoji);
+  const {body, face} = decideBodyFace(a, b);
+  animateFusionVisual(body.emoji, face.emoji);
   document.getElementById('result-name').textContent = r.name;
   document.getElementById('result-desc').textContent = r.desc;
   popup.classList.add('show');
