@@ -2,6 +2,7 @@
    Simpsons Spoof · 减压踢踏（Canvas 版）
    - 轻击扭曲特征 / 长按 3 秒 GLITCH MODE / 上传图片
    - 全部音频用 Web Audio API 合成，无外部资源
+   - 最终发布版：index.html + style.css + game.js 三文件即可运行
    ============================================================ */
 (() => {
   'use strict';
