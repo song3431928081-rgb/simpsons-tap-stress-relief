@@ -985,7 +985,12 @@
     e.preventDefault();
     AudioEngine.startBgm();
     state.holdFired = false;
-    state.pointer = { x: e.clientX, y: e.clientY, moved: false };
+    state.pointer = {
+      x: e.clientX, y: e.clientY,
+      moved: false, dragging: false,
+      lastFx: e,                  // 上一次触发效果的位置
+      fxCount: 0                  // 拖动中已触发次数（限频）
+    };
     clearTimeout(state.longPressTimer);
     state.longPressTimer = setTimeout(() => {
       if (state.pointer && !state.pointer.moved) {
@@ -995,11 +1000,66 @@
     }, 3000);
   }
 
+  // 拖动时的持续效果：在当前位置产生小旋涡 + 扭曲附近特征
+  function dragEffect(e) {
+    const p = canvasPoint(e);
+    if (state.glitch) {
+      // GLITCH 模式下拖动：只播音效
+      if (state.pointer.fxCount % 3 === 0) AudioEngine.sfx('pop');
+      return;
+    }
+    // 小旋涡（力度比点击轻）
+    const r = canvas.getBoundingClientRect();
+    state.swirls.push({
+      cx: p.x * r.width, cy: p.y * r.height,
+      radius: r.width * 0.12,
+      angle: Math.PI * 1.5,
+      start: performance.now(),
+      duration: 400
+    });
+    // 扭曲最近的特征（力度较轻，会回弹）
+    const feat = hitFeature(p.x, p.y);
+    if (feat && state.pointer.fxCount % 2 === 0) {
+      springBack(feat.id, 0.6);
+    }
+    if (state.pointer.fxCount % 4 === 0) AudioEngine.sfx('pop');
+    render();
+  }
+
+  // 弹性回弹工具：把 featId 的扭曲值设为 strength，然后弹性回落到 0
+  function springBack(featId, strength) {
+    state.dist[featId] = strength;
+    clearTimeout(state.distTimers[featId]);
+    const start = performance.now();
+    const dur = 350;
+    function step(now) {
+      const t = Math.min(1, (now - start) / dur);
+      const v = strength * (1 - t) * (1 - t);
+      state.dist[featId] = v;
+      if (!state.glitch) render();
+      if (t < 1) requestAnimationFrame(step);
+      else state.dist[featId] = 0;
+    }
+    requestAnimationFrame(step);
+  }
+
   function onPointerMove(e) {
     if (!state.pointer) return;
-    if (Math.hypot(e.clientX - state.pointer.x, e.clientY - state.pointer.y) > 10) {
+    const dx = e.clientX - state.pointer.x;
+    const dy = e.clientY - state.pointer.y;
+    if (!state.pointer.moved && Math.hypot(dx, dy) > 10) {
       state.pointer.moved = true;
+      state.pointer.dragging = true;
       clearTimeout(state.longPressTimer);
+    }
+    if (state.pointer.dragging) {
+      // 每隔 28px 触发一次拖动效果
+      const fx = state.pointer.lastFx;
+      if (Math.hypot(e.clientX - fx.clientX, e.clientY - fx.clientY) > 28) {
+        state.pointer.lastFx = e;
+        state.pointer.fxCount++;
+        dragEffect(e);
+      }
     }
   }
 
@@ -1009,9 +1069,8 @@
     const moved = state.pointer.moved;
     state.pointer = null;
     if (state.holdFired) return;
-    if (moved) return;
+    if (moved) return;   // 拖动过程中已产生效果，松手不再触发
     if (state.glitch) {
-      // GLITCH 模式点击画布 = 继续 glitch 效果（不退出，退出用按钮）
       AudioEngine.sfx('fusion');
       return;
     }
