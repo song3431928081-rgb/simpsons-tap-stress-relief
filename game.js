@@ -721,20 +721,16 @@
     swirls: []             // 活跃的旋涡效果 [{cx,cy,radius,angle,start,duration}]
   };
 
-  // 旋涡扭曲（像素级，模拟图3的甜甜圈被吸入的效果）
+  // 旋涡扭曲（像素级，局部区域处理，性能优化）
   function applySwirls() {
     if (!state.swirls.length) return;
     const W = canvas.width, H = canvas.height;
     const dpr = window.devicePixelRatio || 1;
-    let imgData;
-    try { imgData = ctx.getImageData(0, 0, W, H); } catch(e) { return; }
-    const data = imgData.data;
-    const temp = new Uint8ClampedArray(data);
     const now = performance.now();
     state.swirls = state.swirls.filter(s => now - s.start < s.duration);
     state.swirls.forEach(s => {
       const t = (now - s.start) / s.duration;
-      // 旋涡角度先增后减（0 -> max -> 0）
+      // 旋涡角度：快速上升到峰值后回落（前25%到峰值，更迅猛）
       const angle = s.angle * Math.sin(t * Math.PI);
       const cx = s.cx * dpr, cy = s.cy * dpr, radius = s.radius * dpr;
       const r2 = radius * radius;
@@ -742,9 +738,16 @@
       const y0 = Math.max(0, Math.floor(cy - radius));
       const x1 = Math.min(W, Math.ceil(cx + radius));
       const y1 = Math.min(H, Math.ceil(cy + radius));
-      for (let y = y0; y < y1; y++) {
-        for (let x = x0; x < x1; x++) {
-          const dx = x - cx, dy = y - cy;
+      const rw = x1 - x0, rh = y1 - y0;
+      if (rw <= 0 || rh <= 0) return;
+      let imgData;
+      try { imgData = ctx.getImageData(x0, y0, rw, rh); } catch(e) { return; }
+      const data = imgData.data;
+      const temp = new Uint8ClampedArray(data);
+      for (let y = 0; y < rh; y++) {
+        for (let x = 0; x < rw; x++) {
+          const px = x0 + x, py = y0 + y;
+          const dx = px - cx, dy = py - cy;
           const dist2 = dx*dx + dy*dy;
           if (dist2 < r2) {
             const f = 1 - Math.sqrt(dist2) / radius;
@@ -752,10 +755,10 @@
             const cos = Math.cos(a), sin = Math.sin(a);
             const sx = cx + dx * cos - dy * sin;
             const sy = cy + dx * sin + dy * cos;
-            const ix = Math.floor(sx), iy = Math.floor(sy);
-            if (ix >= 0 && ix < W && iy >= 0 && iy < H) {
-              const di = (y * W + x) * 4;
-              const si = (iy * W + ix) * 4;
+            const ix = Math.floor(sx - x0), iy = Math.floor(sy - y0);
+            if (ix >= 0 && ix < rw && iy >= 0 && iy < rh) {
+              const di = (y * rw + x) * 4;
+              const si = (iy * rw + ix) * 4;
               data[di] = temp[si];
               data[di+1] = temp[si+1];
               data[di+2] = temp[si+2];
@@ -764,8 +767,8 @@
           }
         }
       }
+      ctx.putImageData(imgData, x0, y0);
     });
-    ctx.putImageData(imgData, 0, 0);
   }
 
   function resizeCanvas() {
@@ -940,35 +943,42 @@
       if (char.features.length) feat = char.features[0];
       else return;
     }
-    state.dist[feat.id] = 1;
+    // 过冲弹跳：立即跳到 1.25，然后弹性回落到 0
+    state.dist[feat.id] = 1.25;
     clearTimeout(state.distTimers[feat.id]);
-    state.distTimers[feat.id] = setTimeout(() => {
-      const start = performance.now();
-      const from = state.dist[feat.id] || 0;
-      const dur = 450;
-      function step(now) {
-        const t = Math.min(1, (now - start) / dur);
-        const ease = 1 - Math.pow(1 - t, 3);
-        state.dist[feat.id] = from * (1 - ease);
-        if (!state.glitch) render();
-        if (t < 1) requestAnimationFrame(step);
-        else state.dist[feat.id] = 0;
+    // 立即回弹（不等 1 秒），用弹性曲线
+    const start = performance.now();
+    const dur = 380;
+    function step(now) {
+      const t = Math.min(1, (now - start) / dur);
+      // 弹性回弹：easeOutBack 风格，末尾轻微回弹
+      let v;
+      if (t < 0.7) {
+        v = 1.25 * (1 - t / 0.7);
+      } else {
+        const u = (t - 0.7) / 0.3;
+        v = -0.2 * Math.sin(u * Math.PI);
       }
-      requestAnimationFrame(step);
-    }, 1000);
-    // 添加旋涡扭曲（像素级吸入效果）
+      state.dist[feat.id] = Math.max(0, v);
+      if (!state.glitch) render();
+      if (t < 1) requestAnimationFrame(step);
+      else state.dist[feat.id] = 0;
+    }
+    requestAnimationFrame(step);
+    // 添加旋涡扭曲（像素级吸入效果）— 更短更快
     const r = canvas.getBoundingClientRect();
     const cx = (px != null ? px : feat.x) * r.width;
     const cy = (py != null ? py : feat.y) * r.height;
-    const radius = Math.max(feat.w, feat.h) * r.width * 1.2;
+    const radius = Math.max(feat.w, feat.h) * r.width * 1.3;
     state.swirls.push({
       cx, cy, radius,
-      angle: Math.PI * 2.5,
+      angle: Math.PI * 3,
       start: performance.now(),
-      duration: 700
+      duration: 480
     });
-    AudioEngine.sfx(CHARS[state.charIdx].sound);
+    // 立即重绘一次（旋涡从下一帧开始）
     if (!state.glitch) render();
+    AudioEngine.sfx(CHARS[state.charIdx].sound);
   }
 
   function onPointerDown(e) {
