@@ -721,54 +721,80 @@
     swirls: []             // 活跃的旋涡效果 [{cx,cy,radius,angle,start,duration}]
   };
 
-  // 旋涡扭曲（像素级，局部区域处理，性能优化）
+  const MAX_SWIRLS = 4;
+  // 旋涡扭曲（像素级，合并所有旋涡到一次 getImageData/putImageData）
   function applySwirls() {
     if (!state.swirls.length) return;
     const W = canvas.width, H = canvas.height;
     const dpr = window.devicePixelRatio || 1;
     const now = performance.now();
-    state.swirls = state.swirls.filter(s => now - s.start < s.duration);
-    state.swirls.forEach(s => {
+    // 清理过期旋涡
+    const active = state.swirls.filter(s => now - s.start < s.duration);
+    state.swirls = active;
+    if (!active.length) return;
+    // 预计算每个旋涡的参数
+    const swirls = active.map(s => {
       const t = (now - s.start) / s.duration;
-      // 旋涡角度：快速上升到峰值后回落（前25%到峰值，更迅猛）
-      const angle = s.angle * Math.sin(t * Math.PI);
-      const cx = s.cx * dpr, cy = s.cy * dpr, radius = s.radius * dpr;
-      const r2 = radius * radius;
-      const x0 = Math.max(0, Math.floor(cx - radius));
-      const y0 = Math.max(0, Math.floor(cy - radius));
-      const x1 = Math.min(W, Math.ceil(cx + radius));
-      const y1 = Math.min(H, Math.ceil(cy + radius));
-      const rw = x1 - x0, rh = y1 - y0;
-      if (rw <= 0 || rh <= 0) return;
-      let imgData;
-      try { imgData = ctx.getImageData(x0, y0, rw, rh); } catch(e) { return; }
-      const data = imgData.data;
-      const temp = new Uint8ClampedArray(data);
-      for (let y = 0; y < rh; y++) {
-        for (let x = 0; x < rw; x++) {
-          const px = x0 + x, py = y0 + y;
-          const dx = px - cx, dy = py - cy;
-          const dist2 = dx*dx + dy*dy;
-          if (dist2 < r2) {
-            const f = 1 - Math.sqrt(dist2) / radius;
-            const a = angle * f * f;
-            const cos = Math.cos(a), sin = Math.sin(a);
-            const sx = cx + dx * cos - dy * sin;
-            const sy = cy + dx * sin + dy * cos;
-            const ix = Math.floor(sx - x0), iy = Math.floor(sy - y0);
-            if (ix >= 0 && ix < rw && iy >= 0 && iy < rh) {
-              const di = (y * rw + x) * 4;
-              const si = (iy * rw + ix) * 4;
-              data[di] = temp[si];
-              data[di+1] = temp[si+1];
-              data[di+2] = temp[si+2];
-              data[di+3] = temp[si+3];
-            }
+      return {
+        cx: s.cx * dpr, cy: s.cy * dpr,
+        radius: s.radius * dpr,
+        angle: s.angle * Math.sin(t * Math.PI)
+      };
+    });
+    // 合并包围盒
+    let x0 = W, y0 = H, x1 = 0, y1 = 0;
+    swirls.forEach(s => {
+      x0 = Math.min(x0, s.cx - s.radius);
+      y0 = Math.min(y0, s.cy - s.radius);
+      x1 = Math.max(x1, s.cx + s.radius);
+      y1 = Math.max(y1, s.cy + s.radius);
+    });
+    x0 = Math.max(0, Math.floor(x0));
+    y0 = Math.max(0, Math.floor(y0));
+    x1 = Math.min(W, Math.ceil(x1));
+    y1 = Math.min(H, Math.ceil(y1));
+    const rw = x1 - x0, rh = y1 - y0;
+    if (rw <= 0 || rh <= 0) return;
+    let imgData;
+    try { imgData = ctx.getImageData(x0, y0, rw, rh); } catch(e) { return; }
+    const data = imgData.data;
+    const temp = new Uint8ClampedArray(data);
+    // 单遍像素遍历：对每个像素找最近的旋涡应用效果
+    for (let y = 0; y < rh; y++) {
+      const py = y0 + y;
+      for (let x = 0; x < rw; x++) {
+        const px = x0 + x;
+        // 找最近的旋涡
+        let best = null, bestD2 = Infinity;
+        for (let i = 0; i < swirls.length; i++) {
+          const s = swirls[i];
+          const dx = px - s.cx, dy = py - s.cy;
+          const d2 = dx*dx + dy*dy;
+          if (d2 < s.radius * s.radius && d2 < bestD2) {
+            bestD2 = d2; best = s;
+          }
+        }
+        if (best) {
+          const dx = px - best.cx, dy = py - best.cy;
+          const dist = Math.sqrt(bestD2);
+          const f = 1 - dist / best.radius;
+          const a = best.angle * f * f;
+          const cos = Math.cos(a), sin = Math.sin(a);
+          const sx = best.cx + dx * cos - dy * sin;
+          const sy = best.cy + dx * sin + dy * cos;
+          const ix = Math.floor(sx - x0), iy = Math.floor(sy - y0);
+          if (ix >= 0 && ix < rw && iy >= 0 && iy < rh) {
+            const di = (y * rw + x) * 4;
+            const si = (iy * rw + ix) * 4;
+            data[di] = temp[si];
+            data[di+1] = temp[si+1];
+            data[di+2] = temp[si+2];
+            data[di+3] = temp[si+3];
           }
         }
       }
-      ctx.putImageData(imgData, x0, y0);
-    });
+    }
+    ctx.putImageData(imgData, x0, y0);
   }
 
   function resizeCanvas() {
@@ -910,9 +936,14 @@
     ctx.drawImage(c, dx, dy);
   }
 
-  // 动画循环（GLITCH 模式 + 旋涡动画 持续重绘）
+  // 动画循环：有任何动画（glitch / swirls / dist）时重绘，由 loop 统一驱动，避免重复 render
+  function hasAnim() {
+    if (state.glitch || state.swirls.length) return true;
+    for (const k in state.dist) if (state.dist[k] > 0.001) return true;
+    return false;
+  }
   function loop() {
-    if (state.glitch || state.swirls.length) render();
+    if (hasAnim()) render();
     state.rafId = requestAnimationFrame(loop);
   }
 
@@ -946,12 +977,10 @@
     // 过冲弹跳：立即跳到 1.25，然后弹性回落到 0
     state.dist[feat.id] = 1.25;
     clearTimeout(state.distTimers[feat.id]);
-    // 立即回弹（不等 1 秒），用弹性曲线
     const start = performance.now();
     const dur = 380;
     function step(now) {
       const t = Math.min(1, (now - start) / dur);
-      // 弹性回弹：easeOutBack 风格，末尾轻微回弹
       let v;
       if (t < 0.7) {
         v = 1.25 * (1 - t / 0.7);
@@ -960,24 +989,23 @@
         v = -0.2 * Math.sin(u * Math.PI);
       }
       state.dist[feat.id] = Math.max(0, v);
-      if (!state.glitch) render();
+      // 不直接 render()，由 loop 统一驱动
       if (t < 1) requestAnimationFrame(step);
       else state.dist[feat.id] = 0;
     }
     requestAnimationFrame(step);
-    // 添加旋涡扭曲（像素级吸入效果）— 更短更快
+    // 添加旋涡扭曲（像素级吸入效果）
     const r = canvas.getBoundingClientRect();
     const cx = (px != null ? px : feat.x) * r.width;
     const cy = (py != null ? py : feat.y) * r.height;
     const radius = Math.max(feat.w, feat.h) * r.width * 1.3;
+    if (state.swirls.length >= MAX_SWIRLS) state.swirls.shift();
     state.swirls.push({
       cx, cy, radius,
       angle: Math.PI * 3,
       start: performance.now(),
       duration: 480
     });
-    // 立即重绘一次（旋涡从下一帧开始）
-    if (!state.glitch) render();
     AudioEngine.sfx(CHARS[state.charIdx].sound);
   }
 
@@ -988,8 +1016,8 @@
     state.pointer = {
       x: e.clientX, y: e.clientY,
       moved: false, dragging: false,
-      lastFx: e,                  // 上一次触发效果的位置
-      fxCount: 0                  // 拖动中已触发次数（限频）
+      lastFxTime: 0,              // 上一次触发效果的时间（时间限频）
+      fxCount: 0
     };
     clearTimeout(state.longPressTimer);
     state.longPressTimer = setTimeout(() => {
@@ -1004,12 +1032,12 @@
   function dragEffect(e) {
     const p = canvasPoint(e);
     if (state.glitch) {
-      // GLITCH 模式下拖动：只播音效
       if (state.pointer.fxCount % 3 === 0) AudioEngine.sfx('pop');
       return;
     }
-    // 小旋涡（力度比点击轻）
+    // 小旋涡（力度比点击轻），限制同时活跃数量
     const r = canvas.getBoundingClientRect();
+    if (state.swirls.length >= MAX_SWIRLS) state.swirls.shift();
     state.swirls.push({
       cx: p.x * r.width, cy: p.y * r.height,
       radius: r.width * 0.12,
@@ -1023,7 +1051,7 @@
       springBack(feat.id, 0.6);
     }
     if (state.pointer.fxCount % 4 === 0) AudioEngine.sfx('pop');
-    render();
+    // 不直接 render()，由 loop 统一驱动
   }
 
   // 弹性回弹工具：把 featId 的扭曲值设为 strength，然后弹性回落到 0
@@ -1036,7 +1064,7 @@
       const t = Math.min(1, (now - start) / dur);
       const v = strength * (1 - t) * (1 - t);
       state.dist[featId] = v;
-      if (!state.glitch) render();
+      // 不直接 render()，由 loop 统一驱动
       if (t < 1) requestAnimationFrame(step);
       else state.dist[featId] = 0;
     }
@@ -1053,10 +1081,10 @@
       clearTimeout(state.longPressTimer);
     }
     if (state.pointer.dragging) {
-      // 每隔 28px 触发一次拖动效果
-      const fx = state.pointer.lastFx;
-      if (Math.hypot(e.clientX - fx.clientX, e.clientY - fx.clientY) > 28) {
-        state.pointer.lastFx = e;
+      // 时间限频：每 70ms 最多触发一次效果，同时要求移动距离 > 15px
+      const now = performance.now();
+      if (now - state.pointer.lastFxTime > 70) {
+        state.pointer.lastFxTime = now;
         state.pointer.fxCount++;
         dragEffect(e);
       }
