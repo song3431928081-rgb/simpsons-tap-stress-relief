@@ -908,9 +908,15 @@
       }
     }
 
+    // 把处理后的 out 写回 img.data，再 putImageData；否则 putImageData 会写回原始未修改的像素，滤镜无效
+    img.data.set(out);
     filterCtx.putImageData(img, 0, 0);
+    // 重置 transform 后按像素尺寸画回主 canvas（避免 dpr 缩放导致绘制越界）
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(filterCanvas, 0, 0, W, H);
+    ctx.drawImage(filterCanvas, 0, 0, canvas.width, canvas.height);
+    ctx.restore();
   }
   // 旋涡扭曲（像素级，合并所有旋涡到一次 getImageData/putImageData）
   function applySwirls() {
