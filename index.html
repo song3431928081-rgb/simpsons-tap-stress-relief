@@ -4,30 +4,34 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#1a1a2e" />
-  <title>减压踢踏 · 辛普森混搭</title>
+  <title>Simpsons Spoof · 减压踢踏</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div id="app">
     <header id="topbar">
-      <div id="title">减压踢踏</div>
+      <div id="title">Simpsons Spoof</div>
       <div id="controls">
         <button id="bgmBtn" class="ctrl" title="背景音乐开/关" aria-label="背景音乐">🎵</button>
         <button id="muteBtn" class="ctrl" title="静音" aria-label="静音">🔊</button>
       </div>
     </header>
 
-    <div id="hint">轻击扭曲表情 · 拖动五官 · 长按 3 秒触发融合彩蛋</div>
-
     <main id="stage">
       <div id="bgLayer"></div>
-      <div id="charWrap" class="neutral"></div>
-      <div id="rippleLayer"></div>
-      <div id="fusionTag" class="hidden">🥚 融合彩蛋 · 再点一下退出</div>
+      <canvas id="charCanvas"></canvas>
+      <div id="glitchOverlay" class="hidden"></div>
+      <div id="glitchTitle" class="hidden">GLITCH MODE!</div>
+      <div id="holdHint">Hold 3s for Secret!</div>
       <div id="toast" class="hidden"></div>
     </main>
 
-    <footer id="selector"></footer>
+    <footer id="actionBar">
+      <button id="nextCharBtn" class="actionBtn yellow">NEXT<br/>CHAR</button>
+      <button id="uploadBtn" class="actionBtn purple">UPLOAD</button>
+      <input type="file" id="fileInput" accept="image/*" class="hidden" />
+      <button id="exitGlitchBtn" class="actionBtn red">EXIT<br/>GLITCH</button>
+    </footer>
   </div>
 
   <script src="game.js"></script>

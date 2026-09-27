@@ -1,13 +1,13 @@
 /* ============================================================
-   减压踢踏 · 辛普森混搭
-   纯前端游戏：扭曲表情 / 拖拽五官 / 融合彩蛋
-   音效与 BGM 全部用 Web Audio API 合成，无外部资源
+   Simpsons Spoof · 减压踢踏（Canvas 版）
+   - 轻击扭曲特征 / 长按 3 秒 GLITCH MODE / 上传图片
+   - 全部音频用 Web Audio API 合成，无外部资源
    ============================================================ */
 (() => {
   'use strict';
 
   /* ============================================================
-     一、音频引擎（合成音效 + 低保真 BGM）
+     一、音频引擎
      ============================================================ */
   const AudioEngine = {
     ctx: null, master: null, bgmGain: null, sfxGain: null,
@@ -37,27 +37,22 @@
       this.resume();
       if (!this.ctx) return;
       const t = this.ctx.currentTime;
-      ({ stretch: () => this._stretch(t), whimper: () => this._whimper(t),
-         boing: () => this._boing(t), chin: () => this._chin(t),
+      ({ boing: () => this._boing(t), whimper: () => this._whimper(t),
+         stretch: () => this._stretch(t), chin: () => this._chin(t),
          fusion: () => this._fusion(t), pop: () => this._pop(t) }[type] || (() => {}))();
     },
-    // 橡胶拉伸（Stewie）
     _stretch(t) {
       const osc = this.ctx.createOscillator(), g = this.ctx.createGain();
-      const lfo = this.ctx.createOscillator(), lfoG = this.ctx.createGain();
       osc.type = 'sawtooth';
       osc.frequency.setValueAtTime(170, t);
       osc.frequency.exponentialRampToValueAtTime(440, t + 0.25);
       osc.frequency.exponentialRampToValueAtTime(110, t + 0.55);
-      lfo.type = 'sine'; lfo.frequency.value = 15; lfoG.gain.value = 22;
-      lfo.connect(lfoG); lfoG.connect(osc.frequency);
       g.gain.setValueAtTime(0, t);
       g.gain.linearRampToValueAtTime(0.28, t + 0.04);
       g.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
       osc.connect(g); g.connect(this.sfxGain);
-      osc.start(t); lfo.start(t); osc.stop(t + 0.65); lfo.stop(t + 0.65);
+      osc.start(t); osc.stop(t + 0.65);
     },
-    // 小狗哼（Brian）
     _whimper(t) {
       [0, 0.16].forEach((d, i) => {
         const osc = this.ctx.createOscillator(), g = this.ctx.createGain();
@@ -72,7 +67,6 @@
         osc.start(t + d); osc.stop(t + d + 0.2);
       });
     },
-    // 头发弹（Marge）
     _boing(t) {
       const osc = this.ctx.createOscillator(), g = this.ctx.createGain();
       osc.type = 'sine';
@@ -85,7 +79,6 @@
       osc.connect(g); g.connect(this.sfxGain);
       osc.start(t); osc.stop(t + 0.5);
     },
-    // 下巴下垂（Homer）
     _chin(t) {
       const o1 = this.ctx.createOscillator(), g1 = this.ctx.createGain();
       o1.type = 'sine'; o1.frequency.setValueAtTime(150, t);
@@ -94,14 +87,6 @@
       g1.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
       o1.connect(g1); g1.connect(this.sfxGain);
       o1.start(t); o1.stop(t + 0.35);
-      // 弹跳第二声
-      const o2 = this.ctx.createOscillator(), g2 = this.ctx.createGain();
-      o2.type = 'sine'; o2.frequency.setValueAtTime(190, t + 0.2);
-      o2.frequency.exponentialRampToValueAtTime(85, t + 0.4);
-      g2.gain.setValueAtTime(0, t + 0.2); g2.gain.linearRampToValueAtTime(0.22, t + 0.22);
-      g2.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
-      o2.connect(g2); g2.connect(this.sfxGain);
-      o2.start(t + 0.2); o2.stop(t + 0.55);
     },
     _pop(t) {
       const osc = this.ctx.createOscillator(), g = this.ctx.createGain();
@@ -112,7 +97,6 @@
       osc.connect(g); g.connect(this.sfxGain);
       osc.start(t); osc.stop(t + 0.12);
     },
-    // 融合爆裂：噪声 + 随机音高
     _fusion(t) {
       const dur = 0.75;
       const buf = this.ctx.createBuffer(1, Math.floor(this.ctx.sampleRate * dur), this.ctx.sampleRate);
@@ -134,23 +118,20 @@
         o.start(tt); o.stop(tt + 0.15);
       }
     },
-    // BGM：低保真卡通曲调循环
     startBgm() {
       this.resume();
       if (!this.ctx || this.bgmTimer) return;
       if (this.bgmOn) this.bgmGain.gain.linearRampToValueAtTime(0.16, this.ctx.currentTime + 1.2);
       this.bgmStep = 0;
-      const tempo = 88, stepDur = 60 / tempo / 2; // 八分音符
-      // 和弦进行 C - Am - F - G（半音偏移）
+      const tempo = 88, stepDur = 60 / tempo / 2;
       const chords = [[0,4,7],[9,12,16],[5,9,12],[7,11,14]];
-      const root = 130.81; // C3
+      const root = 130.81;
       const semi = s => root * Math.pow(2, s/12);
       const tick = () => {
         if (!this.ctx) return;
         const t = this.ctx.currentTime;
         const bar = Math.floor(this.bgmStep / 16) % 4;
         const beat = this.bgmStep % 16;
-        // 每小节首拍铺和弦 pad
         if (beat % 8 === 0) {
           chords[bar].forEach(s => {
             const o = this.ctx.createOscillator(), g = this.ctx.createGain();
@@ -161,7 +142,6 @@
             o.start(t); o.stop(t + stepDur * 8 + 0.05);
           });
         }
-        // 软底鼓
         if (beat % 4 === 0) {
           const o = this.ctx.createOscillator(), g = this.ctx.createGain();
           o.type = 'sine'; o.frequency.setValueAtTime(115, t);
@@ -170,7 +150,6 @@
           o.connect(g); g.connect(this.bgmGain);
           o.start(t); o.stop(t + 0.2);
         }
-        // 琶音旋律
         const ch = chords[bar];
         const note = ch[beat % 3] + 12;
         const o = this.ctx.createOscillator(), g = this.ctx.createGain();
@@ -197,349 +176,764 @@
   };
 
   /* ============================================================
-     二、角色数据：每个特征为一组 SVG（含 class="feat feat-xxx"）
-     expressions：每次轻击循环切换的愚蠢表情（m 为强度倍率，1 普通，2 融合加倍）
+     二、角色绘制（Canvas 2D）
+     每个角色：{ name, bg, sound, features:[{id,label,hitbox,x,y,w,h}], draw(ctx,w,h,dist) }
+     dist: { featId: 0~1 } 扭曲强度
      ============================================================ */
   const SKIN = '#FCD936', SKIN_DK = '#E8B918', OUT = '#1a1a1a';
-  const stroke = (w) => `stroke="${OUT}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round"`;
 
-  const CHARS = {
-    homer: {
-      name: '荷马', bg: '#5DADE2', sound: 'chin', face: SKIN,
-      order: ['head','extra','hair','eyes','nose','mouth'],
-      features: {
-        head: `<g class="feat feat-head" data-feat="head">
-          <ellipse cx="100" cy="120" rx="56" ry="62" fill="${SKIN}" ${stroke(4)}/>
-          <ellipse cx="44" cy="124" rx="9" ry="13" fill="${SKIN}" ${stroke(3.5)}/>
-          <ellipse cx="156" cy="124" rx="9" ry="13" fill="${SKIN}" ${stroke(3.5)}/>
-        </g>`,
-        hair: `<g class="feat feat-hair" data-feat="hair">
-          <path d="M58 80 Q64 46 76 70 Q88 50 100 68 Q112 50 124 70 Q136 46 142 80 Q100 96 58 80 Z" fill="${SKIN_DK}" ${stroke(3.5)}/>
-        </g>`,
-        eyes: `<g class="feat feat-eyes" data-feat="eyes">
-          <circle cx="80" cy="106" r="15" fill="#fff" ${stroke(3.5)}/>
-          <circle cx="120" cy="106" r="15" fill="#fff" ${stroke(3.5)}/>
-          <circle class="pupil" cx="82" cy="108" r="4.5" fill="${OUT}"/>
-          <circle class="pupil" cx="118" cy="108" r="4.5" fill="${OUT}"/>
-        </g>`,
-        nose: `<g class="feat feat-nose" data-feat="nose">
-          <path d="M88 118 Q100 140 112 118 Q112 130 100 136 Q88 130 88 118 Z" fill="${SKIN_DK}" ${stroke(3.5)}/>
-        </g>`,
-        mouth: `<g class="feat feat-mouth" data-feat="mouth">
-          <path d="M82 150 Q100 162 118 150" fill="none" ${stroke(3.5)}/>
-        </g>`,
-        extra: `<g class="feat feat-extra" data-feat="extra">
-          <path d="M64 150 Q100 188 136 150 Q142 170 100 184 Q58 170 64 150 Z" fill="${SKIN_DK}" ${stroke(3.5)}/>
-          <circle cx="90" cy="172" r="1.6" fill="#7a5e00"/>
-          <circle cx="100" cy="176" r="1.6" fill="#7a5e00"/>
-          <circle cx="110" cy="172" r="1.6" fill="#7a5e00"/>
-        </g>`
-      },
-      expressions: [
-        m => ({ extra: `translateY(${16*m}px) scaleY(${1+0.35*m})`, mouth: `translateY(${10*m}px)` }),
-        m => ({ eyes: `scaleY(${1+0.4*m})`, nose: `scaleY(${1+0.25*m})`, mouth: `scaleY(${1+0.6*m})` }),
-        m => ({ extra: `translateY(${12*m}px) scaleY(${1+0.25*m})`, mouth: `translateY(${8*m}px) scaleY(${1.6+0.4*m})` })
-      ]
-    },
-
-    marge: {
-      name: '玛吉', bg: '#FF8B94', sound: 'boing', face: SKIN,
-      order: ['head','extra','hair','eyes','nose','mouth'],
-      features: {
-        head: `<g class="feat feat-head" data-feat="head">
-          <ellipse cx="100" cy="122" rx="48" ry="52" fill="${SKIN}" ${stroke(4)}/>
-          <ellipse cx="52" cy="126" rx="8" ry="11" fill="${SKIN}" ${stroke(3.5)}/>
-          <ellipse cx="148" cy="126" rx="8" ry="11" fill="${SKIN}" ${stroke(3.5)}/>
-        </g>`,
-        hair: `<g class="feat feat-hair" data-feat="hair">
-          <path d="M62 90 Q52 14 100 6 Q148 14 138 90 Q100 70 62 90 Z" fill="#3D8FE0" ${stroke(4)}/>
-          <ellipse cx="100" cy="22" rx="38" ry="26" fill="#3D8FE0" ${stroke(4)}/>
-          <path d="M68 40 Q100 52 132 40" fill="none" ${stroke(2.5)} opacity="0.5"/>
-        </g>`,
-        eyes: `<g class="feat feat-eyes" data-feat="eyes">
-          <circle cx="86" cy="112" r="11" fill="#fff" ${stroke(3)}/>
-          <circle cx="114" cy="112" r="11" fill="#fff" ${stroke(3)}/>
-          <circle cx="88" cy="114" r="3.5" fill="${OUT}"/>
-          <circle cx="116" cy="114" r="3.5" fill="${OUT}"/>
-          <path d="M77 102 L73 96 M86 100 L86 93 M95 102 L99 96" fill="none" ${stroke(2)}/>
-          <path d="M105 102 L101 96 M114 100 L114 93 M123 102 L127 96" fill="none" ${stroke(2)}/>
-        </g>`,
-        nose: `<g class="feat feat-nose" data-feat="nose">
-          <ellipse cx="100" cy="128" rx="6" ry="5" fill="${OUT}"/>
-        </g>`,
-        mouth: `<g class="feat feat-mouth" data-feat="mouth">
-          <path d="M88 142 Q100 150 112 142" fill="none" ${stroke(3)}/>
-          <path d="M92 144 Q100 148 108 144" fill="#C0392B" ${stroke(2)}/>
-        </g>`,
-        extra: `<g class="feat feat-extra" data-feat="extra">
-          <g fill="#fff" ${stroke(1.5)}>
-            <circle cx="76" cy="170" r="4"/><circle cx="88" cy="174" r="4"/><circle cx="100" cy="176" r="4"/>
-            <circle cx="112" cy="174" r="4"/><circle cx="124" cy="170" r="4"/>
-          </g>
-        </g>`
-      },
-      expressions: [
-        m => ({ hair: `skewX(${-12*m}deg) rotate(${-7*m}deg)` }),
-        m => ({ hair: `skewX(${11*m}deg) rotate(${9*m}deg) scaleY(${1-0.08*m})` }),
-        m => ({ hair: `rotate(${-11*m}deg)`, eyes: `scaleY(${1-0.5*m})`, mouth: `scaleY(${1+0.5*m})` })
-      ]
-    },
-
-    stewie: {
-      name: '斯特维', bg: '#A8E6CF', sound: 'stretch', face: SKIN,
-      order: ['head','hair','extra','eyes','nose','mouth'],
-      features: {
-        head: `<g class="feat feat-head" data-feat="head">
-          <ellipse cx="100" cy="105" rx="66" ry="52" fill="${SKIN}" ${stroke(4)}/>
-        </g>`,
-        hair: `<g class="feat feat-hair" data-feat="hair">
-          <path d="M44 86 Q52 50 70 80 Q60 56 82 78 Q72 52 94 76" fill="none" stroke="#9a7b1a" stroke-width="6" stroke-linecap="round"/>
-        </g>`,
-        eyes: `<g class="feat feat-eyes" data-feat="eyes">
-          <ellipse cx="82" cy="100" rx="9" ry="10" fill="#fff" ${stroke(3)}/>
-          <ellipse cx="118" cy="100" rx="9" ry="10" fill="#fff" ${stroke(3)}/>
-          <circle cx="84" cy="102" r="3.5" fill="${OUT}"/>
-          <circle cx="120" cy="102" r="3.5" fill="${OUT}"/>
-        </g>`,
-        nose: `<g class="feat feat-nose" data-feat="nose">
-          <path d="M95 116 L100 124 L105 116 Z" fill="${OUT}"/>
-        </g>`,
-        mouth: `<g class="feat feat-mouth" data-feat="mouth">
-          <path d="M88 132 Q100 124 112 132" fill="none" ${stroke(3)}/>
-        </g>`,
-        extra: `<g class="feat feat-extra" data-feat="extra">
-          <rect x="74" y="140" width="6" height="44" fill="#E53935" ${stroke(2)}/>
-          <rect x="120" y="140" width="6" height="44" fill="#E53935" ${stroke(2)}/>
-          <rect x="68" y="150" width="64" height="40" fill="#1565C0" ${stroke(2)}/>
-        </g>`
-      },
-      expressions: [
-        m => ({ head: `scaleY(${1+0.28*m})`, hair: `translateY(${-8*m}px)`, eyes: `translateY(${-4*m}px)` }),
-        m => ({ head: `scaleX(${1+0.16*m}) scaleY(${1+0.12*m})` }),
-        m => ({ head: `scaleY(${1+0.32*m}) scaleX(${1-0.06*m})`, eyes: `scaleX(${1+0.2*m})`, mouth: `scaleY(${1+0.5*m})` })
-      ]
-    },
-
-    brian: {
-      name: '布莱恩', bg: '#FFE66D', sound: 'whimper', face: '#F5F5F0',
-      order: ['hair','head','snout','nose','eyes','mouth','extra'],
-      features: {
-        head: `<g class="feat feat-head" data-feat="head">
-          <ellipse cx="100" cy="95" rx="55" ry="50" fill="#F5F5F0" ${stroke(4)}/>
-        </g>`,
-        hair: `<g class="feat feat-hair" data-feat="hair">
-          <path d="M40 72 Q18 60 24 92 Q30 108 50 96 Z" fill="#F5F5F0" ${stroke(3.5)}/>
-          <path d="M160 72 Q182 60 176 92 Q170 108 150 96 Z" fill="#F5F5F0" ${stroke(3.5)}/>
-        </g>`,
-        snout: `<g class="feat feat-snout" data-feat="snout">
-          <ellipse cx="100" cy="138" rx="26" ry="22" fill="#F5F5F0" ${stroke(3.5)}/>
-        </g>`,
-        nose: `<g class="feat feat-nose" data-feat="nose">
-          <ellipse cx="100" cy="130" rx="13" ry="10" fill="${OUT}"/>
-          <ellipse cx="96" cy="127" rx="3" ry="2" fill="#444"/>
-        </g>`,
-        eyes: `<g class="feat feat-eyes" data-feat="eyes">
-          <circle cx="80" cy="86" r="7" fill="#fff" ${stroke(3)}/>
-          <circle cx="120" cy="86" r="7" fill="#fff" ${stroke(3)}/>
-          <circle cx="80" cy="87" r="3.5" fill="${OUT}"/>
-          <circle cx="120" cy="87" r="3.5" fill="${OUT}"/>
-        </g>`,
-        mouth: `<g class="feat feat-mouth" data-feat="mouth">
-          <path d="M100 150 Q90 158 82 154" fill="none" ${stroke(3)}/>
-          <path d="M100 150 Q110 158 118 154" fill="none" ${stroke(3)}/>
-        </g>`,
-        extra: `<g class="feat feat-extra" data-feat="extra">
-          <rect x="68" y="158" width="64" height="12" rx="6" fill="#C0392B" ${stroke(3)}/>
-          <circle cx="100" cy="164" r="6" fill="#F1C40F" ${stroke(2)}/>
-        </g>`
-      },
-      expressions: [
-        m => ({ nose: `scaleY(${1-0.65*m})`, snout: `scaleX(${1+0.08*m})` }),
-        m => ({ nose: `scaleY(${1-0.5*m}) translateY(${4*m}px)`, snout: `scaleX(${1+0.12*m})`, eyes: `scaleY(${1+0.2*m})` }),
-        m => ({ nose: `scaleX(${1+0.25*m}) scaleY(${1-0.45*m})`, hair: `rotate(${5*m}deg)` })
-      ]
+  // 画甜甜圈（可缩放旋转）
+  function drawDonut(ctx, cx, cy, r, scaleX, scaleY, rot) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(rot || 0);
+    ctx.scale(scaleX || 1, scaleY || 1);
+    // 外圆（粉色糖霜）
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fillStyle = '#FF7EB3';
+    ctx.fill();
+    ctx.lineWidth = r * 0.12;
+    ctx.strokeStyle = OUT;
+    ctx.stroke();
+    // 内孔
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.32, 0, Math.PI * 2);
+    ctx.fillStyle = '#fff';
+    ctx.fill();
+    ctx.lineWidth = r * 0.1;
+    ctx.strokeStyle = OUT;
+    ctx.stroke();
+    // 糖屑
+    const colors = ['#fff', '#FFD400', '#7CFC00', '#00BFFF', '#FF4500'];
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      const rr = r * 0.62;
+      ctx.save();
+      ctx.translate(Math.cos(a) * rr, Math.sin(a) * rr);
+      ctx.rotate(a + Math.PI / 2);
+      ctx.fillStyle = colors[i % colors.length];
+      ctx.fillRect(-r * 0.06, -r * 0.02, r * 0.12, r * 0.04);
+      ctx.restore();
     }
-  };
+    ctx.restore();
+  }
 
-  const CHAR_KEYS = Object.keys(CHARS);
-  const BG_COLORS = ['#FF6B6B','#4ECDC4','#5DADE2','#A8E6CF','#FF8B94','#C9B6F0','#6BCB77','#FFD93D','#FF8C42'];
-  const ALL_FEATURES = ['hair','head','snout','eyes','nose','mouth','extra'];
+  // Homer 辛普森（吃甜甜圈）
+  function drawHomer(ctx, W, H, dist) {
+    const d = (id, def) => (dist[id] != null ? dist[id] : def || 0);
+    const donutS = 1 + d('donut', 0) * 1.6;
+    const bellyS = 1 + d('belly', 0) * 0.5;
+    const mouthS = 1 + d('mouth', 0) * 0.8;
+    const headTilt = d('head', 0) * 0.15;
+
+    // 背景云
+    ctx.fillStyle = '#B8E0F5';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.save();
+    ctx.translate(W * 0.5, H * 0.62);
+    ctx.rotate(headTilt);
+
+    // 腿
+    ctx.fillStyle = SKIN;
+    ctx.strokeStyle = OUT; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.ellipse(-W*0.06, H*0.22, W*0.05, H*0.05, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(W*0.06, H*0.22, W*0.05, H*0.05, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    // 鞋
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.ellipse(-W*0.06, H*0.26, W*0.06, H*0.03, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(W*0.06, H*0.26, W*0.06, H*0.03, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+
+    // 蓝裤
+    ctx.fillStyle = '#3B82F6';
+    ctx.beginPath();
+    ctx.moveTo(-W*0.14, H*0.05);
+    ctx.lineTo(W*0.14, H*0.05);
+    ctx.lineTo(W*0.12, H*0.2);
+    ctx.lineTo(-W*0.12, H*0.2);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+
+    // 白衫 + 大肚子
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.ellipse(0, -H*0.02, W*0.22 * bellyS, H*0.16 * bellyS, 0, 0, Math.PI*2);
+    ctx.fill(); ctx.stroke();
+
+    // 手臂
+    ctx.fillStyle = SKIN;
+    ctx.beginPath(); ctx.ellipse(-W*0.22, -H*0.02, W*0.05, H*0.12, -0.3, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(W*0.22, -H*0.02, W*0.05, H*0.12, 0.3, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    // 手
+    ctx.beginPath(); ctx.arc(-W*0.24, H*0.06, W*0.04, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(W*0.24, H*0.06, W*0.04, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+
+    // 脖子
+    ctx.fillStyle = SKIN;
+    ctx.fillRect(-W*0.05, -H*0.14, W*0.1, H*0.06);
+    ctx.strokeRect(-W*0.05, -H*0.14, W*0.1, H*0.06);
+
+    // 头
+    ctx.beginPath();
+    ctx.ellipse(0, -H*0.2, W*0.18, H*0.18, 0, 0, Math.PI*2);
+    ctx.fill(); ctx.stroke();
+    // 头顶秃
+    ctx.beginPath();
+    ctx.ellipse(0, -H*0.3, W*0.1, H*0.06, 0, 0, Math.PI*2);
+    ctx.fill(); ctx.stroke();
+    // 耳朵
+    ctx.beginPath(); ctx.arc(-W*0.17, -H*0.2, W*0.025, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(W*0.17, -H*0.2, W*0.025, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+
+    // 眼睛
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(-W*0.06, -H*0.22, W*0.05, H*0.055, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(W*0.06, -H*0.22, W*0.05, H*0.055, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = OUT;
+    ctx.beginPath(); ctx.arc(-W*0.06, -H*0.22, W*0.015, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(W*0.06, -H*0.22, W*0.015, 0, Math.PI*2); ctx.fill();
+
+    // 鼻子
+    ctx.fillStyle = SKIN;
+    ctx.beginPath();
+    ctx.ellipse(0, -H*0.16, W*0.04, H*0.025, 0, 0, Math.PI*2);
+    ctx.fill(); ctx.stroke();
+
+    // 嘴 + 牙
+    ctx.save();
+    ctx.translate(0, -H*0.12);
+    ctx.scale(mouthS, mouthS);
+    ctx.fillStyle = '#8B2500';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, W*0.06, H*0.04, 0, 0, Math.PI*2);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(-W*0.055, -H*0.04, W*0.11, H*0.02);
+    ctx.strokeRect(-W*0.055, -H*0.04, W*0.11, H*0.02);
+    ctx.restore();
+
+    // 甜甜圈（拿在右手边嘴边）
+    drawDonut(ctx, -W*0.13, -H*0.1, W*0.065 * donutS, donutS, donutS, -0.4);
+
+    ctx.restore();
+  }
+
+  // Marge
+  function drawMarge(ctx, W, H, dist) {
+    const d = (id, def) => (dist[id] != null ? dist[id] : def || 0);
+    const hairBend = d('hair', 0) * 0.5;
+    const headTilt = d('head', 0) * 0.1;
+
+    ctx.fillStyle = '#FFE4F1';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.save();
+    ctx.translate(W*0.5, H*0.6);
+    ctx.rotate(headTilt);
+
+    // 脖子
+    ctx.fillStyle = SKIN; ctx.strokeStyle = OUT; ctx.lineWidth = 4;
+    ctx.fillRect(-W*0.04, -H*0.08, W*0.08, H*0.06);
+    ctx.strokeRect(-W*0.04, -H*0.08, W*0.08, H*0.06);
+
+    // 绿裙
+    ctx.fillStyle = '#16A085';
+    ctx.beginPath();
+    ctx.moveTo(-W*0.2, H*0.0);
+    ctx.lineTo(W*0.2, H*0.0);
+    ctx.lineTo(W*0.16, H*0.22);
+    ctx.lineTo(-W*0.16, H*0.22);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+
+    // 头
+    ctx.fillStyle = SKIN;
+    ctx.beginPath();
+    ctx.ellipse(0, -H*0.18, W*0.16, H*0.16, 0, 0, Math.PI*2);
+    ctx.fill(); ctx.stroke();
+
+    // 蓝色高卷发
+    ctx.save();
+    ctx.rotate(hairBend);
+    ctx.fillStyle = '#3D8FE0';
+    ctx.beginPath();
+    ctx.moveTo(-W*0.16, -H*0.26);
+    ctx.bezierCurveTo(-W*0.2, -H*0.55, -W*0.05, -H*0.6, 0, -H*0.55);
+    ctx.bezierCurveTo(W*0.05, -H*0.6, W*0.2, -H*0.55, W*0.16, -H*0.26);
+    ctx.bezierCurveTo(W*0.1, -H*0.32, -W*0.1, -H*0.32, -W*0.16, -H*0.26);
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
+
+    // 眼睛
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(-W*0.05, -H*0.2, W*0.035, H*0.04, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(W*0.05, -H*0.2, W*0.035, H*0.04, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = OUT;
+    ctx.beginPath(); ctx.arc(-W*0.05, -H*0.19, W*0.012, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(W*0.05, -H*0.19, W*0.012, 0, Math.PI*2); ctx.fill();
+
+    // 鼻子
+    ctx.fillStyle = SKIN;
+    ctx.beginPath(); ctx.arc(0, -H*0.14, W*0.02, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+
+    // 嘴
+    ctx.strokeStyle = OUT;
+    ctx.beginPath(); ctx.arc(0, -H*0.1, W*0.025, 0, Math.PI); ctx.stroke();
+
+    // 珍珠项链
+    ctx.fillStyle = '#fff';
+    for (let i = -3; i <= 3; i++) {
+      ctx.beginPath();
+      ctx.arc(i * W*0.025, -H*0.04, W*0.012, 0, Math.PI*2);
+      ctx.fill(); ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  // Bart
+  function drawBart(ctx, W, H, dist) {
+    const d = (id, def) => (dist[id] != null ? dist[id] : def || 0);
+    const hairShake = d('hair', 0);
+    const mouthS = 1 + d('mouth', 0) * 0.8;
+
+    ctx.fillStyle = '#87CEEB';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.save();
+    ctx.translate(W*0.5, H*0.62);
+
+    // 腿
+    ctx.fillStyle = SKIN; ctx.strokeStyle = OUT; ctx.lineWidth = 4;
+    ctx.fillRect(-W*0.06, H*0.06, W*0.04, H*0.1); ctx.strokeRect(-W*0.06, H*0.06, W*0.04, H*0.1);
+    ctx.fillRect(W*0.02, H*0.06, W*0.04, H*0.1); ctx.strokeRect(W*0.02, H*0.06, W*0.04, H*0.1);
+    // 鞋
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.ellipse(-W*0.04, H*0.16, W*0.04, H*0.025, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(W*0.04, H*0.16, W*0.04, H*0.025, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+
+    // 蓝短裤
+    ctx.fillStyle = '#3B82F6';
+    ctx.beginPath();
+    ctx.moveTo(-W*0.1, -H*0.02);
+    ctx.lineTo(W*0.1, -H*0.02);
+    ctx.lineTo(W*0.08, H*0.06);
+    ctx.lineTo(-W*0.08, H*0.06);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+
+    // 橙T恤
+    ctx.fillStyle = '#FF6B35';
+    ctx.beginPath();
+    ctx.moveTo(-W*0.12, -H*0.1);
+    ctx.lineTo(W*0.12, -H*0.1);
+    ctx.lineTo(W*0.1, -H*0.02);
+    ctx.lineTo(-W*0.1, -H*0.02);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+
+    // 手臂
+    ctx.fillStyle = SKIN;
+    ctx.beginPath(); ctx.ellipse(-W*0.14, -H*0.06, W*0.03, H*0.06, -0.2, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(W*0.14, -H*0.06, W*0.03, H*0.06, 0.2, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+
+    // 头
+    ctx.fillStyle = SKIN;
+    ctx.beginPath();
+    ctx.ellipse(0, -H*0.18, W*0.14, H*0.14, 0, 0, Math.PI*2);
+    ctx.fill(); ctx.stroke();
+
+    // 锯齿头
+    ctx.save();
+    ctx.translate(0, -H*0.28);
+    const spikes = 9;
+    ctx.beginPath();
+    ctx.moveTo(-W*0.14, 0);
+    for (let i = 0; i < spikes; i++) {
+      const x1 = -W*0.14 + (i + 0.5) * (W*0.28/spikes);
+      const x2 = -W*0.14 + (i + 1) * (W*0.28/spikes);
+      const yOff = hairShake * Math.sin(i + Date.now()*0.02) * 4;
+      ctx.lineTo(x1, -H*0.06 + yOff);
+      ctx.lineTo(x2, 0);
+    }
+    ctx.fillStyle = SKIN;
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
+
+    // 眼睛
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(-W*0.04, -H*0.2, W*0.03, H*0.035, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(W*0.04, -H*0.2, W*0.03, H*0.035, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = OUT;
+    ctx.beginPath(); ctx.arc(-W*0.04, -H*0.19, W*0.01, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(W*0.04, -H*0.19, W*0.01, 0, Math.PI*2); ctx.fill();
+
+    // 鼻子
+    ctx.fillStyle = SKIN;
+    ctx.beginPath(); ctx.arc(0, -H*0.15, W*0.018, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+
+    // 嘴（大笑）
+    ctx.save();
+    ctx.translate(0, -H*0.11);
+    ctx.scale(mouthS, mouthS);
+    ctx.fillStyle = '#8B2500';
+    ctx.beginPath(); ctx.ellipse(0, 0, W*0.04, H*0.025, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.restore();
+
+    ctx.restore();
+  }
+
+  // Lisa
+  function drawLisa(ctx, W, H, dist) {
+    const d = (id, def) => (dist[id] != null ? dist[id] : def || 0);
+    const hairGrow = d('hair', 0);
+    const saxSpin = d('sax', 0);
+
+    ctx.fillStyle = '#FFE4B5';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.save();
+    ctx.translate(W*0.5, H*0.6);
+
+    // 腿
+    ctx.fillStyle = SKIN; ctx.strokeStyle = OUT; ctx.lineWidth = 4;
+    ctx.fillRect(-W*0.05, H*0.04, W*0.035, H*0.1); ctx.strokeRect(-W*0.05, H*0.04, W*0.035, H*0.1);
+    ctx.fillRect(W*0.015, H*0.04, W*0.035, H*0.1); ctx.strokeRect(W*0.015, H*0.04, W*0.035, H*0.1);
+    // 玛丽珍鞋
+    ctx.fillStyle = '#C0392B';
+    ctx.beginPath(); ctx.ellipse(-W*0.03, H*0.14, W*0.035, H*0.02, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(W*0.03, H*0.14, W*0.035, H*0.02, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+
+    // 红裙
+    ctx.fillStyle = '#E74C3C';
+    ctx.beginPath();
+    ctx.moveTo(-W*0.12, -H*0.04);
+    ctx.lineTo(W*0.12, -H*0.04);
+    ctx.lineTo(W*0.15, H*0.08);
+    ctx.lineTo(-W*0.15, H*0.08);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+
+    // 手臂
+    ctx.fillStyle = SKIN;
+    ctx.beginPath(); ctx.ellipse(-W*0.13, -H*0.02, W*0.025, H*0.05, -0.3, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(W*0.13, -H*0.02, W*0.025, H*0.05, 0.3, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+
+    // 头
+    ctx.fillStyle = SKIN;
+    ctx.beginPath();
+    ctx.ellipse(0, -H*0.16, W*0.13, H*0.13, 0, 0, Math.PI*2);
+    ctx.fill(); ctx.stroke();
+
+    // 星形头发
+    ctx.save();
+    ctx.translate(0, -H*0.26);
+    ctx.rotate(saxSpin * 0.5);
+    ctx.fillStyle = SKIN;
+    const starR = W * (0.08 + hairGrow * 0.04);
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 - Math.PI/2;
+      const r = i % 2 === 0 ? starR : starR * 0.5;
+      const x = Math.cos(a) * r, y = Math.sin(a) * r;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
+
+    // 眼睛
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(-W*0.035, -H*0.17, W*0.025, H*0.03, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(W*0.035, -H*0.17, W*0.025, H*0.03, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = OUT;
+    ctx.beginPath(); ctx.arc(-W*0.035, -H*0.16, W*0.008, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(W*0.035, -H*0.16, W*0.008, 0, Math.PI*2); ctx.fill();
+
+    // 鼻子
+    ctx.fillStyle = SKIN;
+    ctx.beginPath(); ctx.arc(0, -H*0.12, W*0.015, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+
+    // 嘴
+    ctx.strokeStyle = OUT;
+    ctx.beginPath(); ctx.arc(0, -H*0.09, W*0.02, 0, Math.PI); ctx.stroke();
+
+    // 萨克斯
+    ctx.save();
+    ctx.translate(W*0.08, -H*0.08);
+    ctx.rotate(saxSpin * 2);
+    ctx.fillStyle = '#F1C40F';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.bezierCurveTo(W*0.1, H*0.02, W*0.12, H*0.12, W*0.04, H*0.14);
+    ctx.bezierCurveTo(-W*0.04, H*0.16, -W*0.02, H*0.04, 0, 0);
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
+
+    ctx.restore();
+  }
+
+  // 角色定义
+  const CHARS = [
+    { name: 'Homer', bg: '#87CEEB', sound: 'boing',
+      features: [
+        { id: 'donut', label: '甜甜圈', x: 0.37, y: 0.5, w: 0.16, h: 0.14 },
+        { id: 'belly', label: '肚子', x: 0.5, y: 0.6, w: 0.3, h: 0.2 },
+        { id: 'mouth', label: '嘴', x: 0.5, y: 0.48, w: 0.1, h: 0.06 },
+        { id: 'head', label: '头', x: 0.5, y: 0.42, w: 0.3, h: 0.2 }
+      ],
+      draw: drawHomer },
+    { name: 'Marge', bg: '#FFE4F1', sound: 'boing',
+      features: [
+        { id: 'hair', label: '头发', x: 0.5, y: 0.2, w: 0.35, h: 0.35 },
+        { id: 'head', label: '头', x: 0.5, y: 0.42, w: 0.28, h: 0.28 },
+        { id: 'mouth', label: '嘴', x: 0.5, y: 0.5, w: 0.06, h: 0.04 }
+      ],
+      draw: drawMarge },
+    { name: 'Bart', bg: '#87CEEB', sound: 'stretch',
+      features: [
+        { id: 'hair', label: '头发', x: 0.5, y: 0.3, w: 0.3, h: 0.15 },
+        { id: 'mouth', label: '嘴', x: 0.5, y: 0.5, w: 0.08, h: 0.05 },
+        { id: 'head', label: '头', x: 0.5, y: 0.42, w: 0.26, h: 0.26 }
+      ],
+      draw: drawBart },
+    { name: 'Lisa', bg: '#FFE4B5', sound: 'whimper',
+      features: [
+        { id: 'hair', label: '星发', x: 0.5, y: 0.3, w: 0.2, h: 0.2 },
+        { id: 'sax', label: '萨克斯', x: 0.6, y: 0.5, w: 0.15, h: 0.15 },
+        { id: 'head', label: '头', x: 0.5, y: 0.44, w: 0.24, h: 0.24 }
+      ],
+      draw: drawLisa }
+  ];
 
   /* ============================================================
-     三、游戏控制器
+     三、游戏状态与渲染
      ============================================================ */
-  const $ = (s) => document.querySelector(s);
-  const stage = $('#stage');
-  const charWrap = $('#charWrap');
-  const bgLayer = $('#bgLayer');
-  const rippleLayer = $('#rippleLayer');
-  const fusionTag = $('#fusionTag');
-  const toast = $('#toast');
-  const selector = $('#selector');
+  const canvas = document.getElementById('charCanvas');
+  const ctx = canvas.getContext('2d');
+  const stage = document.getElementById('stage');
+  const bgLayer = document.getElementById('bgLayer');
+  const holdHint = document.getElementById('holdHint');
+  const glitchTitle = document.getElementById('glitchTitle');
+  const glitchOverlay = document.getElementById('glitchOverlay');
+  const actionBar = document.getElementById('actionBar');
+  const exitBtn = document.getElementById('exitGlitchBtn');
+  const toast = document.getElementById('toast');
 
   const state = {
-    current: 'homer',
-    exprIdx: 0,
-    fusion: null,        // {charA, charB, parts:{feat:{char,svg}}, order:[...]}
-    bgIdx: 0,
+    charIdx: 0,
+    customImg: null,       // 用户上传的图片
+    dist: {},              // 当前扭曲 {featId: 0~1}
+    distTimers: {},        // 回弹定时器
+    glitch: false,
+    glitchTime: 0,
     longPressTimer: null,
-    longPressFired: false,
-    holdPulseTimer: null
+    holdFired: false,
+    pointer: null,
+    rafId: null
   };
 
-  /* ---- 渲染单个角色 ---- */
-  function buildCharSVG(key) {
-    const c = CHARS[key];
-    let inner = '';
-    c.order.forEach(f => { if (c.features[f]) inner += c.features[f]; });
-    return `<svg viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet" data-char="${key}">${inner}</svg>`;
+  function resizeCanvas() {
+    const r = stage.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = r.width * dpr;
+    canvas.height = r.height * dpr;
+    canvas.style.width = r.width + 'px';
+    canvas.style.height = r.height + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    render();
   }
+  window.addEventListener('resize', resizeCanvas);
 
-  /* ---- 渲染融合角色 ---- */
-  function buildFusionSVG(charA, charB) {
-    const a = CHARS[charA], b = CHARS[charB];
-    // 收集所有出现过的特征
-    const feats = new Set([...a.order, ...b.order]);
-    // 每个特征随机取自 A 或 B（head 优先取 A 保证主体）
-    const parts = {};
-    const order = [];
-    feats.forEach(f => {
-      const useA = (f === 'head') ? Math.random() < 0.7 : Math.random() < 0.5;
-      const src = (useA && a.features[f]) ? charA : (b.features[f] ? charB : charA);
-      if (!CHARS[src].features[f]) return;
-      parts[f] = { char: src, svg: CHARS[src].features[f] };
-      order.push(f);
-    });
-    // 确保至少混合了两个角色
-    const usedChars = new Set(Object.values(parts).map(p => p.char));
-    if (usedChars.size < 2) {
-      // 强制把一个特征换成另一角色
-      const otherKey = charB;
-      for (const f of Object.keys(parts)) {
-        if (CHARS[otherKey].features[f]) { parts[f] = { char: otherKey, svg: CHARS[otherKey].features[f] }; break; }
-      }
+  // 渲染主循环
+  function render() {
+    const W = parseFloat(canvas.style.width);
+    const H = parseFloat(canvas.style.height);
+    ctx.clearRect(0, 0, W, H);
+
+    if (state.glitch) {
+      renderGlitch(W, H);
+    } else {
+      renderNormal(W, H);
     }
-    let inner = '';
-    ALL_FEATURES.forEach(f => { if (parts[f]) inner += parts[f].svg; });
-    return { svg: `<svg viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet" data-fusion="1">${inner}</svg>`, parts };
   }
 
-  /* ---- 应用表情变换（普通 m=1 / 融合 m=2） ---- */
-  function applyExpression(svgRoot, exprFn, m) {
-    const transforms = exprFn(m);
-    Object.keys(transforms).forEach(feat => {
-      const el = svgRoot.querySelector('.feat-' + feat);
-      if (el) el.style.transform = transforms[feat];
+  function renderNormal(W, H) {
+    const char = CHARS[state.charIdx];
+    if (state.customImg) {
+      // 上传图片模式：居中绘制，保留比例
+      const img = state.customImg;
+      const ir = img.width / img.height;
+      const sr = W / H;
+      let dw, dh;
+      if (ir > sr) { dw = W; dh = W / ir; } else { dh = H; dw = H * ir; }
+      ctx.drawImage(img, (W - dw)/2, (H - dh)/2, dw, dh);
+    } else {
+      char.draw(ctx, W, H, state.dist);
+    }
+  }
+
+  // GLITCH 渲染：把正常画面先画到离屏，再做 RGB 分离 + 切片 + 旋转
+  const offscreen = document.createElement('canvas');
+  const offCtx = offscreen.getContext('2d');
+  function renderGlitch(W, H) {
+    state.glitchTime += 0.016;
+    offscreen.width = W; offscreen.height = H;
+    offCtx.clearRect(0, 0, W, H);
+
+    const char = CHARS[state.charIdx];
+    if (state.customImg) {
+      const img = state.customImg;
+      const ir = img.width / img.height;
+      const sr = W / H;
+      let dw, dh;
+      if (ir > sr) { dw = W; dh = W / ir; } else { dh = H; dw = H * ir; }
+      offCtx.drawImage(img, (W - dw)/2, (H - dh)/2, dw, dh);
+    } else {
+      char.draw(offCtx, W, H, state.dist);
+    }
+
+    // 整体旋转 + 脉动缩放
+    const rot = Math.sin(state.glitchTime * 3) * 0.15;
+    const sc = 1 + Math.sin(state.glitchTime * 8) * 0.08;
+    ctx.save();
+    ctx.translate(W/2, H/2);
+    ctx.rotate(rot);
+    ctx.scale(sc, sc);
+    ctx.translate(-W/2, -H/2);
+
+    // RGB 分离绘制
+    const slices = 16;
+    const sliceH = H / slices;
+    for (let i = 0; i < slices; i++) {
+      const sy = i * sliceH;
+      const offset = (Math.random() - 0.5) * 30 * (Math.random() < 0.4 ? 1 : 0.1);
+      // R 通道偏左
+      ctx.globalCompositeOperation = 'screen';
+      ctx.globalAlpha = 0.8;
+      ctx.drawImage(offscreen, 0, sy, W, sliceH, offset, sy, W, sliceH);
+      // 用红绿蓝分别 tint
+      drawChannel(offscreen, 0, sy, W, sliceH, offset - 6, sy, '255,0,0');
+      drawChannel(offscreen, 0, sy, W, sliceH, offset + 6, sy, '0,255,255');
+      drawChannel(offscreen, 0, sy, W, sliceH, offset, sy, '0,255,0');
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+
+    // 像素块：随机方块色彩反转
+    for (let i = 0; i < 8; i++) {
+      const bx = Math.random() * W;
+      const by = Math.random() * H;
+      const bw = 20 + Math.random() * 80;
+      const bh = 4 + Math.random() * 12;
+      ctx.fillStyle = `hsl(${Math.random()*360},100%,60%)`;
+      ctx.globalAlpha = 0.4;
+      ctx.fillRect(bx, by, bw, bh);
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.restore();
+
+    // 边缘暗角
+    const grad = ctx.createRadialGradient(W/2, H/2, W*0.2, W/2, H/2, W*0.7);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.5)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // 用一个单色版本绘制某通道（模拟 RGB 分离）
+  function drawChannel(src, sx, sy, sw, sh, dx, dy, rgb) {
+    const c = document.createElement('canvas');
+    c.width = sw; c.height = sh;
+    const cc = c.getContext('2d');
+    cc.drawImage(src, sx, sy, sw, sh, 0, 0, sw, sh);
+    const img = cc.getImageData(0, 0, sw, sh);
+    const [r, g, b] = rgb.split(',').map(Number);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const gray = (img.data[i] + img.data[i+1] + img.data[i+2]) / 3;
+      img.data[i] = r > 0 ? gray : 0;
+      img.data[i+1] = g > 0 ? gray : 0;
+      img.data[i+2] = b > 0 ? gray : 0;
+    }
+    cc.putImageData(img, 0, 0);
+    ctx.drawImage(c, dx, dy);
+  }
+
+  // 动画循环（GLITCH 模式持续重绘）
+  function loop() {
+    if (state.glitch) render();
+    state.rafId = requestAnimationFrame(loop);
+  }
+
+  /* ============================================================
+     四、交互
+     ============================================================ */
+  function canvasPoint(e) {
+    const r = canvas.getBoundingClientRect();
+    return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+  }
+
+  function hitFeature(px, py) {
+    if (state.customImg) return null; // 上传图片模式无特征
+    const char = CHARS[state.charIdx];
+    let best = null, bestDist = Infinity;
+    char.features.forEach(f => {
+      const dx = px - f.x, dy = py - f.y;
+      const d = Math.hypot(dx, dy);
+      // 命中区域放大
+      if (d < Math.max(f.w, f.h) * 0.8 && d < bestDist) { best = f; bestDist = d; }
     });
-  }
-  function resetTransforms(svgRoot) {
-    svgRoot.querySelectorAll('.feat').forEach(el => { el.style.transform = ''; el.classList.remove('held','dragging'); });
+    return best;
   }
 
-  /* ---- 切换角色 ---- */
-  function setCharacter(key) {
-    state.current = key;
-    state.fusion = null;
-    state.exprIdx = 0;
-    charWrap.className = '';
-    void charWrap.offsetWidth;
-    charWrap.innerHTML = buildCharSVG(key);
-    charWrap.classList.add('entering', 'neutral');
-    fusionTag.classList.add('hidden');
-    charWrap.classList.remove('fusion');
-    const c = CHARS[key];
-    bgLayer.style.background = c.bg;
-    document.querySelectorAll('.charBtn').forEach(b => b.classList.toggle('active', b.dataset.char === key));
+  function triggerFeature(feat) {
+    if (!feat) {
+      // 点击空白：轻微整体扭曲
+      const char = CHARS[state.charIdx];
+      if (char.features.length) feat = char.features[0];
+      else return;
+    }
+    state.dist[feat.id] = 1;
+    clearTimeout(state.distTimers[feat.id]);
+    state.distTimers[feat.id] = setTimeout(() => {
+      // 弹性回弹
+      const start = performance.now();
+      const from = state.dist[feat.id] || 0;
+      const dur = 400;
+      function step(now) {
+        const t = Math.min(1, (now - start) / dur);
+        const ease = 1 - Math.pow(1 - t, 3);
+        state.dist[feat.id] = from * (1 - ease);
+        if (!state.glitch) render();
+        if (t < 1) requestAnimationFrame(step);
+        else state.dist[feat.id] = 0;
+      }
+      requestAnimationFrame(step);
+    }, 1200);
+    AudioEngine.sfx(CHARS[state.charIdx].sound);
+    if (!state.glitch) render();
+  }
+
+  function onPointerDown(e) {
+    e.preventDefault();
+    AudioEngine.startBgm();
+    state.holdFired = false;
+    state.pointer = { x: e.clientX, y: e.clientY, moved: false };
+    clearTimeout(state.longPressTimer);
+    state.longPressTimer = setTimeout(() => {
+      if (state.pointer && !state.pointer.moved) {
+        enterGlitch();
+        state.holdFired = true;
+      }
+    }, 3000);
+  }
+
+  function onPointerMove(e) {
+    if (!state.pointer) return;
+    if (Math.hypot(e.clientX - state.pointer.x, e.clientY - state.pointer.y) > 10) {
+      state.pointer.moved = true;
+      clearTimeout(state.longPressTimer);
+    }
+  }
+
+  function onPointerUp(e) {
+    if (!state.pointer) return;
+    clearTimeout(state.longPressTimer);
+    const moved = state.pointer.moved;
+    state.pointer = null;
+    if (state.holdFired) return;
+    if (moved) return;
+    if (state.glitch) {
+      // GLITCH 模式点击画布 = 继续 glitch 效果（不退出，退出用按钮）
+      AudioEngine.sfx('fusion');
+      return;
+    }
+    // 普通模式：轻击扭曲最近特征
+    const p = canvasPoint(e);
+    const feat = hitFeature(p.x, p.y);
+    triggerFeature(feat);
+  }
+
+  canvas.addEventListener('pointerdown', onPointerDown, { passive: false });
+  window.addEventListener('pointermove', onPointerMove, { passive: false });
+  window.addEventListener('pointerup', onPointerUp, { passive: false });
+  canvas.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+  canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+
+  /* ============================================================
+     五、GLITCH 模式
+     ============================================================ */
+  function enterGlitch() {
+    state.glitch = true;
+    state.glitchTime = 0;
+    glitchTitle.classList.remove('hidden');
+    glitchOverlay.classList.remove('hidden');
+    holdHint.classList.add('hidden');
+    actionBar.classList.add('glitch');
+    bgLayer.style.background = '#1a1a1a';
+    // 随机扭曲所有特征
+    const char = CHARS[state.charIdx];
+    char.features.forEach(f => { state.dist[f.id] = Math.random(); });
+    AudioEngine.sfx('fusion');
+    const app = document.getElementById('app');
+    app.classList.remove('shake'); void app.offsetWidth; app.classList.add('shake');
+    showToast('🎮 GLITCH MODE!');
+    render();
+  }
+
+  function exitGlitch() {
+    state.glitch = false;
+    glitchTitle.classList.add('hidden');
+    glitchOverlay.classList.add('hidden');
+    holdHint.classList.remove('hidden');
+    actionBar.classList.remove('glitch');
+    bgLayer.style.background = CHARS[state.charIdx].bg;
+    state.dist = {};
+    render();
+  }
+
+  exitBtn.addEventListener('click', () => { AudioEngine.sfx('pop'); exitGlitch(); });
+
+  /* ============================================================
+     六、角色切换 + 上传
+     ============================================================ */
+  function setChar(idx) {
+    state.charIdx = (idx + CHARS.length) % CHARS.length;
+    state.customImg = null;
+    state.dist = {};
+    if (state.glitch) exitGlitch();
+    bgLayer.style.background = CHARS[state.charIdx].bg;
+    render();
     AudioEngine.sfx('pop');
   }
 
-  /* ---- 触发普通扭曲（循环表情） ---- */
-  function triggerDistortion() {
-    if (state.fusion) { exitFusion(); return; }
-    const c = CHARS[state.current];
-    const svg = charWrap.querySelector('svg');
-    if (!svg) return;
-    state.exprIdx = (state.exprIdx + 1) % c.expressions.length;
-    applyExpression(svg, c.expressions[state.exprIdx], 1);
-    AudioEngine.sfx(c.sound);
-    spawnRipple(0, 0, '#fff');
-    // 1.6 秒后回弹
-    clearTimeout(state._revertTimer);
-    state._revertTimer = setTimeout(() => {
-      const s = charWrap.querySelector('svg');
-      if (s && !state.fusion) resetTransforms(s);
-    }, 1600);
-  }
+  document.getElementById('nextCharBtn').addEventListener('click', () => {
+    setChar(state.charIdx + 1);
+  });
 
-  /* ---- 进入融合彩蛋模式 ---- */
-  function enterFusion() {
-    state.longPressFired = true;
-    // 随机两个不同角色
-    const pool = [...CHAR_KEYS];
-    const a = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
-    const b = pool[Math.floor(Math.random() * pool.length)];
-    const built = buildFusionSVG(a, b);
-    state.fusion = { charA: a, charB: b, parts: built.parts };
-    charWrap.className = '';
-    void charWrap.offsetWidth;
-    charWrap.innerHTML = built.svg;
-    charWrap.classList.add('fusion', 'entering');
-    fusionTag.classList.remove('hidden');
-    // 背景换色
-    bgLayer.style.background = BG_COLORS[Math.floor(Math.random() * BG_COLORS.length)];
-    // 全屏闪 + 涟漪
-    const flash = document.createElement('div');
-    flash.className = 'flash';
-    rippleLayer.appendChild(flash);
-    setTimeout(() => flash.remove(), 500);
-    spawnRipple(0, 0, '#fff');
-    spawnRipple(-80, -40, '#ffd93d');
-    spawnRipple(80, 40, '#fff');
-    // 屏幕抖动
-    const app = $('#app');
-    app.classList.remove('shake'); void app.offsetWidth; app.classList.add('shake');
-    showToast('🥚 ' + CHARS[a].name + ' × ' + CHARS[b].name + ' 融合！');
-    AudioEngine.sfx('fusion');
-    // 融合瞬间自动叠加两角色的加倍扭曲（表情更夸张）
-    requestAnimationFrame(() => applyFusionDistortion(2));
-  }
+  // UPLOAD
+  const fileInput = document.getElementById('fileInput');
+  document.getElementById('uploadBtn').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        state.customImg = img;
+        state.dist = {};
+        if (state.glitch) exitGlitch();
+        bgLayer.style.background = '#1a1a1a';
+        showToast('📷 图片已加载 · 长按 3s 可 GLITCH');
+        render();
+        AudioEngine.sfx('pop');
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+    fileInput.value = '';
+  });
 
-  /* ---- 融合模式扭曲：叠加两个原角色的扭曲，强度加倍，不回弹（保持夸张直到退出） ---- */
-  function applyFusionDistortion(m) {
-    if (!state.fusion) return;
-    const { charA, charB, parts } = state.fusion;
-    const svg = charWrap.querySelector('svg');
-    if (!svg) return;
-    const exprA = CHARS[charA].expressions[Math.floor(Math.random() * CHARS[charA].expressions.length)](m);
-    const exprB = CHARS[charB].expressions[Math.floor(Math.random() * CHARS[charB].expressions.length)](m);
-    // 对每个特征，应用其来源角色的表情变换（两角色扭曲叠加）
-    Object.keys(parts).forEach(feat => {
-      const el = svg.querySelector('.feat-' + feat);
-      if (!el) return;
-      const src = parts[feat].char;
-      const t = (src === charA ? exprA[feat] : exprB[feat]) || '';
-      el.style.transform = t;
-    });
-  }
-
-  /* ---- 退出融合模式 ---- */
-  function exitFusion() {
-    state.fusion = null;
-    charWrap.classList.remove('fusion');
-    fusionTag.classList.add('hidden');
-    setCharacter(state.current);
-  }
-
-  /* ---- 涟漪 ---- */
-  function spawnRipple(dx, dy, color) {
-    const r = document.createElement('div');
-    r.className = 'ripple';
-    r.style.setProperty('--rx', dx + 'px');
-    r.style.setProperty('--ry', dy + 'px');
-    if (color) r.style.borderColor = color;
-    rippleLayer.appendChild(r);
-    setTimeout(() => r.remove(), 850);
-  }
+  /* ============================================================
+     七、UI 辅助
+     ============================================================ */
   function showToast(msg) {
     toast.textContent = msg;
     toast.classList.remove('hidden');
@@ -547,187 +941,28 @@
     state._toastTimer = setTimeout(() => toast.classList.add('hidden'), 1800);
   }
 
-  /* ---- 背景轮换（每次扭曲时轻微换色） ---- */
-  function cycleBg(base) {
-    // 在角色主色基础上偶尔换鲜艳色
-    if (Math.random() < 0.3) {
-      bgLayer.style.background = BG_COLORS[Math.floor(Math.random() * BG_COLORS.length)];
-    }
-  }
-
-  /* ============================================================
-     四、交互处理：轻击 / 拖拽 / 长按
-     ============================================================ */
-  const DRAG_FEATS = ['eyes','nose','mouth','hair','extra','snout']; // 可拖动特征
-  let pointer = null; // 当前交互状态
-
-  function getSVGPoint(clientX, clientY, svg) {
-    const pt = svg.createSVGPoint();
-    pt.x = clientX; pt.y = clientY;
-    const m = svg.getScreenCTM();
-    if (!m) return { x: clientX, y: clientY };
-    const p = pt.matrixTransform(m.inverse());
-    return { x: p.x, y: p.y };
-  }
-
-  function hitTestFeature(clientX, clientY) {
-    const svg = charWrap.querySelector('svg');
-    if (!svg) return null;
-    for (const feat of DRAG_FEATS) {
-      const el = svg.querySelector('.feat-' + feat);
-      if (!el) continue;
-      const bbox = el.getBoundingClientRect();
-      // 放大命中区方便手指
-      const pad = 14;
-      if (clientX >= bbox.left - pad && clientX <= bbox.right + pad &&
-          clientY >= bbox.top - pad && clientY <= bbox.bottom + pad) {
-        return { el, feat };
-      }
-    }
-    return null;
-  }
-
-  function onPointerDown(e) {
-    if (e.button !== undefined && e.button !== 0) return;
-    e.preventDefault();
-    AudioEngine.startBgm(); // 首次交互启动 BGM
-    const cx = e.clientX, cy = e.clientY;
-    state.longPressFired = false;
-    const hit = hitTestFeature(cx, cy);
-    pointer = {
-      startX: cx, startY: cy,
-      lastX: cx, lastY: cy,
-      moved: false,
-      dragging: false,
-      featEl: hit ? hit.el : null,
-      feat: hit ? hit.feat : null,
-      dragStartPoint: null,
-      svg: charWrap.querySelector('svg')
-    };
-    if (pointer.featEl) {
-      const sp = getSVGPoint(cx, cy, pointer.svg);
-      pointer.dragStartPoint = sp;
-      // 记录该元素当前 transform 基础值（空）
-      pointer.baseTransform = pointer.featEl.style.transform || '';
-    }
-    // 长按 3 秒触发融合（仅未在拖动且移动很少时）；融合态再长按 = 换一组新融合
-    clearTimeout(state.longPressTimer);
-    state.longPressTimer = setTimeout(() => {
-      if (pointer && !pointer.dragging && !pointer.moved) {
-        enterFusion();
-      }
-    }, 3000);
-    // 长按脉冲反馈（1.5 秒后角色轻微抖动提示）
-    clearTimeout(state.holdPulseTimer);
-    state.holdPulseTimer = setTimeout(() => {
-      if (pointer && !pointer.moved && !state.fusion) {
-        charWrap.classList.add('fusion'); // 复用抖动样式作为提示
-        setTimeout(() => { if (!state.fusion) charWrap.classList.remove('fusion'); }, 400);
-      }
-    }, 1500);
-  }
-
-  function onPointerMove(e) {
-    if (!pointer) return;
-    e.preventDefault();
-    const cx = e.clientX, cy = e.clientY;
-    const dx = cx - pointer.startX, dy = cy - pointer.startY;
-    if (!pointer.moved && Math.hypot(dx, dy) > 10) {
-      pointer.moved = true;
-      // 取消长按（开始拖动则不触发融合）
-      clearTimeout(state.longPressTimer);
-      clearTimeout(state.holdPulseTimer);
-      if (!state.fusion && pointer.featEl) {
-        pointer.dragging = true;
-        pointer.featEl.classList.add('dragging');
-      }
-    }
-    if (pointer.dragging && pointer.featEl) {
-      const sp = getSVGPoint(cx, cy, pointer.svg);
-      const ox = sp.x - pointer.dragStartPoint.x;
-      const oy = sp.y - pointer.dragStartPoint.y;
-      // 用 translate 跟随手指，保留原 transform（如表情）
-      pointer.featEl.style.transform = `translate(${ox}px, ${oy}px)`;
-      pointer.lastX = cx; pointer.lastY = cy;
-    }
-  }
-
-  function onPointerUp(e) {
-    if (!pointer) return;
-    clearTimeout(state.longPressTimer);
-    clearTimeout(state.holdPulseTimer);
-    // 仅清除“长按提示”用到的抖动样式；真正处于融合模式时保留
-    if (!state.fusion) charWrap.classList.remove('fusion');
-    const wasDragging = pointer.dragging;
-    const moved = pointer.moved;
-    const dur = (e.timeStamp || Date.now()) - (pointer.downTime || Date.now());
-
-    if (wasDragging && pointer.featEl) {
-      // 松手回弹
-      pointer.featEl.classList.remove('dragging');
-      pointer.featEl.style.transform = ''; // 回弹到中性
-      AudioEngine.sfx('pop');
-      spawnRipple(0, 0, '#fff');
-    } else if (!state.longPressFired) {
-      // 短按 = 轻击扭曲 / 退出融合
-      if (state.fusion) {
-        // 融合态再次轻击 = 退出融合（按屏幕说明“再点一下退出”）
-        exitFusion();
-      } else if (!moved) {
-        triggerDistortion();
-        cycleBg();
-      }
-    }
-    pointer = null;
-  }
-
-  // 统一指针事件（鼠标 + 触摸 + 笔）
-  stage.addEventListener('pointerdown', onPointerDown, { passive: false });
-  window.addEventListener('pointermove', onPointerMove, { passive: false });
-  window.addEventListener('pointerup', onPointerUp, { passive: false });
-  window.addEventListener('pointercancel', onPointerUp, { passive: false });
-  // 阻止移动端默认滚动/缩放
-  stage.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
-  stage.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
-  document.addEventListener('gesturestart', e => e.preventDefault());
-
-  /* ============================================================
-     五、UI 构建
-     ============================================================ */
-  function buildSelector() {
-    selector.innerHTML = '';
-    CHAR_KEYS.forEach(key => {
-      const c = CHARS[key];
-      const btn = document.createElement('button');
-      btn.className = 'charBtn' + (key === state.current ? ' active' : '');
-      btn.dataset.char = key;
-      btn.setAttribute('aria-label', c.name);
-      btn.innerHTML = `<div class="dot" style="background:${c.bg}"></div>`;
-      btn.title = c.name;
-      btn.addEventListener('click', () => setCharacter(key));
-      selector.appendChild(btn);
-    });
-  }
-
-  /* ---- 控制按钮 ---- */
-  const bgmBtn = $('#bgmBtn'), muteBtn = $('#muteBtn');
-  bgmBtn.addEventListener('click', () => {
+  // 音频按钮
+  document.getElementById('bgmBtn').addEventListener('click', () => {
     AudioEngine.resume();
     const on = AudioEngine.toggleBgm();
-    bgmBtn.classList.toggle('off', !on);
-    bgmBtn.textContent = on ? '🎵' : '🔇';
+    const b = document.getElementById('bgmBtn');
+    b.classList.toggle('off', !on);
+    b.textContent = on ? '🎵' : '🔇';
     if (on && !AudioEngine.bgmTimer) AudioEngine.startBgm();
   });
-  muteBtn.addEventListener('click', () => {
+  document.getElementById('muteBtn').addEventListener('click', () => {
     AudioEngine.resume();
     const m = AudioEngine.toggleMute();
-    muteBtn.classList.toggle('off', m);
-    muteBtn.textContent = m ? '🔇' : '🔊';
+    const b = document.getElementById('muteBtn');
+    b.classList.toggle('off', m);
+    b.textContent = m ? '🔇' : '🔊';
   });
 
-  /* ---- 初始化 ---- */
-  buildSelector();
-  setCharacter('homer');
-  // 浏览器要求用户手势后才能播放音频，首次交互会启动 BGM
+  /* ============================================================
+     八、初始化
+     ============================================================ */
+  bgLayer.style.background = CHARS[0].bg;
+  resizeCanvas();
+  loop();
   window.addEventListener('pointerdown', () => AudioEngine.startBgm(), { once: true });
 })();
