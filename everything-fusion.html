@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Everything Fusion Workshop · 万物融合工坊</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+html,body{width:100%;height:100%;overflow:hidden;background:#1a1a2e;font-family:'Courier New',monospace;touch-action:none}
+#wrap{position:fixed;inset:0;display:flex;flex-direction:column}
+canvas{display:block;touch-action:none}
+#topbar{position:fixed;top:env(safe-area-inset-top,8px);left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:8px 12px;z-index:10}
+.title{color:#fff;font-size:14px;font-weight:700;text-shadow:2px 2px 0 #ff6b9d;letter-spacing:1px}
+.top-btn{background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);color:#fff;padding:6px 12px;border-radius:10px;font-size:12px;cursor:pointer;font-family:inherit}
+.top-btn:active{transform:scale(.92)}
+#pool-wrap{position:fixed;bottom:env(safe-area-inset-bottom,10px);left:0;right:0;height:90px;z-index:8;overflow:hidden;background:rgba(0,0,0,.3);border-top:2px solid rgba(255,255,255,.1)}
+#pool{display:flex;gap:8px;padding:10px 12px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none}
+#pool::-webkit-scrollbar{display:none}
+.pool-item{flex:0 0 auto;width:64px;height:64px;background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.2);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;scroll-snap-align:start;cursor:grab;position:relative}
+.pool-item.locked{opacity:.3}
+.pool-item:active{cursor:grabbing}
+.pool-emoji{font-size:28px;line-height:1}
+.pool-name{font-size:9px;color:#fff;margin-top:3px;text-align:center}
+/* drag ghost */
+#drag-ghost{position:fixed;pointer-events:none;z-index:100;font-size:44px;transform:translate(-50%,-50%);filter:drop-shadow(0 4px 8px rgba(0,0,0,.4));display:none}
+/* modal */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:50;display:none;align-items:center;justify-content:center;padding:16px}
+.modal.show{display:flex}
+.modal-box{background:#16213e;border:3px solid #ff6b9d;border-radius:16px;max-width:92%;max-height:85vh;overflow:hidden;display:flex;flex-direction:column;width:360px}
+.modal-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:rgba(255,107,157,.15);border-bottom:2px solid rgba(255,107,157,.3)}
+.modal-title{color:#fff;font-size:15px;font-weight:700}
+.modal-close{background:none;border:none;color:#fff;font-size:22px;cursor:pointer;line-height:1}
+.modal-body{padding:14px;overflow-y:auto;flex:1}
+/* album */
+.recipe-card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:10px;margin-bottom:10px}
+.recipe-top{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.recipe-emoji{font-size:32px}
+.recipe-name{color:#fff;font-size:14px;font-weight:700}
+.recipe-desc{color:#aaa;font-size:11px;line-height:1.5;margin-bottom:4px}
+.recipe-meta{color:#ff6b9d;font-size:10px;display:flex;gap:10px}
+.recipe-note{color:#ffd93d;font-size:11px;font-style:italic;margin-top:4px}
+.sort-bar{display:flex;gap:6px;margin-bottom:10px}
+.sort-btn{flex:1;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);color:#fff;padding:6px;border-radius:8px;font-size:11px;cursor:pointer;font-family:inherit}
+.sort-btn.active{background:#ff6b9d}
+/* toast */
+#toast{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.85);color:#fff;padding:12px 20px;border-radius:12px;font-size:13px;z-index:200;opacity:0;pointer-events:none;transition:opacity .25s;text-align:center;max-width:80%}
+#toast.show{opacity:1}
+/* tutorial */
+.tutorial-step{color:#fff;font-size:14px;line-height:1.8;text-align:center;padding:20px}
+.tutorial-step .big{font-size:48px;display:block;margin-bottom:10px}
+.tut-btn{background:#ff6b9d;border:none;color:#fff;padding:10px 24px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;margin-top:16px;font-family:inherit}
+/* fusion result popup */
+#result-popup{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0);background:linear-gradient(135deg,#ff6b9d,#a855f7);border:4px solid #ffd93d;border-radius:20px;padding:24px 30px;z-index:120;text-align:center;transition:transform .4s cubic-bezier(.34,1.56,.64,1);box-shadow:0 0 40px rgba(255,107,157,.6)}
+#result-popup.show{transform:translate(-50%,-50%) scale(1)}
+#result-emoji{font-size:72px;filter:drop-shadow(0 4px 12px rgba(0,0,0,.3))}
+#result-name{color:#fff;font-size:20px;font-weight:700;margin:8px 0;text-shadow:2px 2px 0 rgba(0,0,0,.3)}
+#result-desc{color:#ffd93d;font-size:13px;margin-bottom:12px;max-width:240px}
+#result-actions{display:flex;gap:8px;justify-content:center}
+.res-btn{background:rgba(255,255,255,.25);border:2px solid #fff;color:#fff;padding:8px 14px;border-radius:10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:700}
+.res-btn:active{transform:scale(.92)}
+/* share float btn */
+#share-float{position:fixed;right:12px;top:50%;transform:translateY(-50%);width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#ff6b9d,#a855f7);border:none;color:#fff;font-size:22px;cursor:pointer;z-index:9;box-shadow:0 4px 16px rgba(255,107,157,.5)}
+#share-float:active{transform:translateY(-50%) scale(.9)}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c"></canvas>
+</div>
+<div id="topbar">
+  <div class="title">🧬 万物融合工坊</div>
+  <div style="display:flex;gap:6px">
+    <button class="top-btn" id="btn-album">📖 相册</button>
+    <button class="top-btn" id="btn-reset">🔄</button>
+  </div>
+</div>
+<button id="share-float" title="分享当前融合">📋</button>
+<div id="pool-wrap"><div id="pool"></div></div>
+<div id="drag-ghost"></div>
+
+<!-- result popup -->
+<div id="result-popup">
+  <div id="result-emoji">❓</div>
+  <div id="result-name">融合中...</div>
+  <div id="result-desc"></div>
+  <div id="result-actions">
+    <button class="res-btn" id="res-close">关闭</button>
+    <button class="res-btn" id="res-copy">📋 复制</button>
+  </div>
+</div>
+
+<!-- album modal -->
+<div class="modal" id="album-modal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <span class="modal-title">📖 融合相册</span>
+      <button class="modal-close" data-close="album">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="sort-bar">
+        <button class="sort-btn active" data-sort="time">按时间</button>
+        <button class="sort-btn" data-sort="fun">按有趣度</button>
+      </div>
+      <div id="recipe-list"></div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="sort-btn" id="btn-backup">💾 备份</button>
+        <button class="sort-btn" id="btn-restore">♻️ 还原</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- item detail modal -->
+<div class="modal" id="detail-modal">
+  <div class="modal-box" style="width:300px">
+    <div class="modal-head">
+      <span class="modal-title" id="detail-title">物品</span>
+      <button class="modal-close" data-close="detail">✕</button>
+    </div>
+    <div class="modal-body" style="text-align:center">
+      <div id="detail-emoji" style="font-size:64px;margin:10px 0"></div>
+      <div id="detail-name" style="color:#fff;font-size:18px;font-weight:700;margin-bottom:8px"></div>
+      <div id="detail-desc" style="color:#aaa;font-size:13px;line-height:1.6"></div>
+      <div id="detail-rarity" style="color:#ffd93d;font-size:12px;margin-top:10px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- tutorial modal -->
+<div class="modal show" id="tut-modal">
+  <div class="modal-box" style="width:320px">
+    <div class="tutorial-step" id="tut-step">
+      <span class="big">👆</span>
+      <div>从底部物品池<br>拖动一个物品到中心融合圈</div>
+      <button class="tut-btn" id="tut-next">下一步</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+(()=>{
+'use strict';
+const C=document.getElementById('c');
+const ctx=C.getContext('2d');
+let DPR=Math.min(window.devicePixelRatio||1,3);
+function resize(){DPR=Math.min(window.devicePixelRatio||1,3);C.width=innerWidth*DPR;C.height=innerHeight*DPR;ctx.setTransform(DPR,0,0,DPR,0,0)}
+resize();addEventListener('resize',resize);
+
+// ===== Audio =====
+let AC=null;
+function ac(){if(!AC)AC=new (window.AudioContext||window.webkitAudioContext)();return AC}
+function tone(f,d,t='sine',v=.25,s=0){const a=ac();const o=a.createOscillator();const g=a.createGain();o.type=t;o.frequency.value=f;if(s)o.frequency.exponentialRampToValueAtTime(Math.max(20,f+s),a.currentTime+d);g.gain.value=v;g.gain.exponentialRampToValueAtTime(.001,a.currentTime+d);o.connect(g);g.connect(a.destination);o.start();o.stop(a.currentTime+d)}
+function sndDrop(){tone(300,.1,'sine',.3,200)}
+function sndFuse(){const a=ac();[400,600,800,1000].forEach((f,i)=>{const o=a.createOscillator();const g=a.createGain();o.type='sine';o.frequency.value=f;const t=a.currentTime+i*.12;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.2,t+.02);g.gain.exponentialRampToValueAtTime(.001,t+.2);o.connect(g);g.connect(a.destination);o.start(t);o.stop(t+.2)})}
+function sndPop(){tone(700,.08,'square',.3,-500)}
+function sndGiggle(){[500,700,500,900].forEach((f,i)=>setTimeout(()=>tone(f,.08,'triangle',.2),i*60))}
+function sndUnlock(){[523,659,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,.2,'triangle',.25),i*100))}
+
+// ===== Data =====
+const BASE_ITEMS=[
+  {id:'cat',emoji:'🐱',name:'猫',desc:'喜欢晒太阳和纸箱的小毛球'},
+  {id:'pizza',emoji:'🍕',name:'披萨',desc:'芝士拉丝到天际的快乐'},
+  {id:'cloud',emoji:'☁️',name:'云',desc:'软绵绵的天空棉花糖'},
+  {id:'book',emoji:'📚',name:'书',desc:'装着无数异世界的入口'},
+  {id:'lamp',emoji:'💡',name:'灯',desc:'照亮黑暗的小太阳'},
+  {id:'star',emoji:'⭐',name:'星星',desc:'夜空里眨眼睛的小精灵'},
+  {id:'fish',emoji:'🐟',name:'鱼',desc:'在水里自由滑翔的精灵'},
+  {id:'cake',emoji:'🍰',name:'蛋糕',desc:'每一口都是幸福的味道'},
+  {id:'moon',emoji:'🌙',name:'月亮',desc:'夜空中最温柔的弯'},
+  {id:'tree',emoji:'🌳',name:'树',desc:'站着不动也很酷的巨人'},
+  {id:'fire',emoji:'🔥',name:'火',desc:'热情似火的小可爱'},
+  {id:'rainbow',emoji:'🌈',name:'彩虹',desc:'雨后天空的微笑'},
+  {id:'ice',emoji:'🧊',name:'冰块',desc:'冷到骨子里的酷'},
+  {id:'music',emoji:'🎵',name:'音符',desc:'会跳舞的声音'},
+  {id:'heart',emoji:'❤️',name:'爱心',desc:'扑通扑通跳个不停'},
+  {id:'rocket',emoji:'🚀',name:'火箭',desc:'冲向宇宙的冒险家'},
+  {id:'robot',emoji:'🤖',name:'机器人',desc:'哔哔哔，我是好伙伴',locked:true},
+  {id:'flower',emoji:'🌸',name:'花',desc:'春天的小信使',locked:true},
+  {id:'umbrella',emoji:'☂️',name:'伞',desc:'雨天的守护者',locked:true},
+  {id:'crown',emoji:'👑',name:'皇冠',desc:'至高无上的荣耀',locked:true},
+  {id:'diamond',emoji:'💎',name:'钻石',desc:'闪闪发光的永恒',locked:true},
+];
+const itemMap={};BASE_ITEMS.forEach(i=>itemMap[i.id]=i);
+
+// pre-defined funny fusions (low repetition)
+const FUSION_RECIPES={
+  'cat+pizza':{emoji:'🐱',name:'披萨猫',desc:'喜欢芝士和在盘子上小睡',fun:9},
+  'pizza+cat':{emoji:'🐱',name:'披萨猫',desc:'喜欢芝士和在盘子上小睡',fun:9},
+  'cloud+lamp':{emoji:'☁️',name:'发光云灯',desc:'漂浮在天花板的柔光',fun:8},
+  'lamp+cloud':{emoji:'☁️',name:'发光云灯',desc:'漂浮在天花板的柔光',fun:8},
+  'book+cat':{emoji:'📚',name:'猫形书',desc:'有爪页的书，会自己翻页',fun:9},
+  'cat+book':{emoji:'📚',name:'猫形书',desc:'有爪页的书，会自己翻页',fun:9},
+  'cat+fish':{emoji:'🐱',name:'鱼猫',desc:'在水里游但不喝水',fun:7},
+  'fish+cat':{emoji:'🐱',name:'鱼猫',desc:'在水里游但不喝水',fun:7},
+  'fire+ice':{emoji:'💧',name:'冰火两重天',desc:'一边冒火一边结冰',fun:8},
+  'ice+fire':{emoji:'💧',name:'冰火两重天',desc:'一边冒火一边结冰',fun:8},
+  'star+star':{emoji:'🌟',name:'双子星',desc:'两颗星星手拉手',fun:6},
+  'moon+star':{emoji:'🌙',name:'星月',desc:'月亮带着小星星',fun:7},
+  'star+moon':{emoji:'🌙',name:'星月',desc:'月亮带着小星星',fun:7},
+  'cake+cat':{emoji:'🍰',name:'蛋糕猫',desc:'头上顶着奶油的猫',fun:9},
+  'cat+cake':{emoji:'🍰',name:'蛋糕猫',desc:'头上顶着奶油的猫',fun:9},
+  'heart+heart':{emoji:'💖',name:'心心相印',desc:'双倍心动暴击',fun:8},
+  'tree+fire':{emoji:'🔥',name:'燃烧树',desc:'冬天的暖宝宝',fun:7},
+  'fire+tree':{emoji:'🔥',name:'燃烧树',desc:'冬天的暖宝宝',fun:7},
+  'rocket+cat':{emoji:'🚀',name:'火箭猫',desc:'喵星人回母星',fun:9},
+  'cat+rocket':{emoji:'🚀',name:'火箭猫',desc:'喵星人回母星',fun:9},
+  'rainbow+cloud':{emoji:'🌈',name:'彩虹云',desc:'下雨都是糖果味',fun:8},
+  'cloud+rainbow':{emoji:'🌈',name:'彩虹云',desc:'下雨都是糖果味',fun:8},
+  'music+fish':{emoji:'🐟',name:'唱歌鱼',desc:'张嘴就是交响乐',fun:8},
+  'fish+music':{emoji:'🐟',name:'唱歌鱼',desc:'张嘴就是交响乐',fun:8},
+  'robot+flower':{emoji:'🤖',name:'花机器人',desc:'钢铁外壳下的浪漫',fun:9},
+  'flower+robot':{emoji:'🤖',name:'花机器人',desc:'钢铁外壳下的浪漫',fun:9},
+  'umbrella+rainbow':{emoji:'☂️',name:'彩虹伞',desc:'撑开就是一片天',fun:8},
+  'rainbow+umbrella':{emoji:'☂️',name:'彩虹伞',desc:'撑开就是一片天',fun:8},
+  'diamond+fire':{emoji:'💎',name:'熔钻',desc:'液态的永恒之光',fun:9},
+  'fire+diamond':{emoji:'💎',name:'熔钻',desc:'液态的永恒之光',fun:9},
+  'crown+cat':{emoji:'👑',name:'猫国王',desc:'喵呜即是法律',fun:10},
+  'cat+crown':{emoji:'👑',name:'猫国王',desc:'喵呜即是法律',fun:10},
+  'book+book':{emoji:'📚',name:'百科全书',desc:'什么都知道一点点',fun:6},
+  'cake+crown':{emoji:'🍰',name:'加冕蛋糕',desc:'吃一口就成贵族',fun:8},
+  'crown+cake':{emoji:'🍰',name:'加冕蛋糕',desc:'吃一口就成贵族',fun:8},
+  'moon+moon':{emoji:'🌕',name:'超级满月',desc:'狼人看了都沉默',fun:7},
+  'lamp+fire':{emoji:'🔥',name:'烈焰灯',desc:'亮度爆表警告',fun:7},
+  'fire+lamp':{emoji:'🔥',name:'烈焰灯',desc:'亮度爆表警告',fun:7},
+};
+
+// random fusion generator for unknown combos
+const NAME_PARTS_A=['超','迷你','量子','终极','彩虹','蒸汽','霓虹','赛博','魔法','太空','像素','复古'];
+const NAME_PARTS_B=['融合','混合','变异','进化','杂交','合体','跨界','混搭','混血'];
+const DESCS=[
+  '看起来怪怪的但又莫名可爱','有一种说不清的魅力','据说是宇宙的秘密','会发出奇怪的光','摸起来软软的','会自己动！','闻起来香香的','据说能带来好运','没人知道它是怎么来的','有点烫手','会模仿你的表情','传说中的存在','好像在哼歌','眼睛里有星星','会瞬移！','比看起来重多了','会说梦话','对猫毛过敏','喜欢下雨天','是个左撇子',
+];
+const EMOJI_POOL=['✨','🌟','💫','🔮','🌀','🌈','💥','🎭','🎪','🎨','🧬','⚗️','🔬','💡','🪄','🎯','🎲','🧩','🧪','⚡','🌊','🍀','🦄','🐙','🍄'];
+
+function hashStr(s){let h=0;for(let i=0;i<s.length;i++)h=((h<<5)-h+s.charCodeAt(i))|0;return Math.abs(h)}
+
+function generateFusion(a,b){
+  const key=a.id+'+'+b.id;
+  if(FUSION_RECIPES[key]){
+    const r=FUSION_RECIPES[key];
+    return{...r,ra:a.id,rb:b.id,time:Date.now()};
+  }
+  // random but deterministic-ish based on items + time
+  const h=hashStr(a.name+b.name+Date.now());
+  const namePart=NAME_PARTS_A[h%NAME_PARTS_A.length]+NAME_PARTS_B[(h>>3)%NAME_PARTS_B.length];
+  // pick emoji: blend or random
+  const useA=h%3===0,useB=h%3===1;
+  const emoji=useA?a.emoji:useB?b.emoji:EMOJI_POOL[h%EMOJI_POOL.length];
+  const name=namePart+a.name+b.name;
+  const desc=DESCS[h%DESCS.length];
+  const fun=3+(h%7);
+  return{emoji,name,desc,fun,ra:a.id,rb:b.id,time:Date.now()};
+}
+
+// ===== State =====
+const state={
+  album:JSON.parse(localStorage.getItem('efw_album')||'[]'),
+  unlocked:JSON.parse(localStorage.getItem('efw_unlocked')||'["cat","pizza","cloud","book","lamp","star","fish","cake","moon","tree","fire","rainbow","ice","music","heart","rocket"]'),
+  slot1:null,slot2:null,
+  fusing:false,
+  fuseT:0,
+  particles:[],
+  ripples:[],
+  glow:0,
+  result:null,
+  sort:'time',
+  longPressTimer:null,
+};
+function save(){localStorage.setItem('efw_album',JSON.stringify(state.album));localStorage.setItem('efw_unlocked',JSON.stringify(state.unlocked))}
+function isUnlocked(id){return state.unlocked.includes(id)}
+
+// ===== UI: pool =====
+const pool=document.getElementById('pool');
+function renderPool(){
+  pool.innerHTML='';
+  BASE_ITEMS.forEach(it=>{
+    const div=document.createElement('div');
+    div.className='pool-item'+(isUnlocked(it.id)?'':' locked');
+    div.dataset.id=it.id;
+    div.innerHTML=`<div class="pool-emoji">${isUnlocked(it.id)?it.emoji:'🔒'}</div><div class="pool-name">${it.name}</div>`;
+    if(!isUnlocked(it.id))return;
+    // drag handlers
+    let startX,startY,moved=false,longT;
+    function onStart(e){
+      e.preventDefault();
+      const t=e.touches?e.touches[0]:e;
+      startX=t.clientX;startY=t.clientY;moved=false;
+      const a=ac();if(a.state==='suspended')a.resume();
+      longT=setTimeout(()=>{showDetail(it)},500);
+    }
+    function onMove(e){
+      const t=e.touches?e.touches[0]:e;
+      if(Math.hypot(t.clientX-startX,t.clientY-startY)>8){
+        moved=true;clearTimeout(longT);
+        if(dragGhost.style.display==='none'){
+          dragGhost.style.display='block';
+          dragGhost.textContent=it.emoji;
+        }
+        dragGhost.style.left=t.clientX+'px';
+        dragGhost.style.top=t.clientY+'px';
+        draggingItem=it;
+      }
+    }
+    function onEnd(e){
+      clearTimeout(longT);
+      if(moved&&draggingItem){
+        const t=e.changedTouches?e.changedTouches[0]:e;
+        handleDrop(t.clientX,t.clientY);
+      }
+      dragGhost.style.display='none';
+      draggingItem=null;
+    }
+    div.addEventListener('touchstart',onStart,{passive:false});
+    div.addEventListener('touchmove',onMove,{passive:false});
+    div.addEventListener('touchend',onEnd);
+    div.addEventListener('mousedown',onStart);
+    div.addEventListener('dblclick',()=>showDetail(it));
+    pool.appendChild(div);
+  });
+}
+let draggingItem=null;
+const dragGhost=document.getElementById('drag-ghost');
+
+// ===== Fusion circle =====
+function getCircle(){
+  const cx=innerWidth/2,cy=innerHeight/2-20;
+  const r=Math.min(innerWidth,innerHeight)*0.16;
+  return{cx,cy,r};
+}
+function handleDrop(x,y){
+  const c=getCircle();
+  const d=Math.hypot(x-c.cx,y-c.cy);
+  if(d>c.r*1.5)return;
+  if(!state.slot1){state.slot1=draggingItem;sndDrop();addRipple(x,y)}
+  else if(!state.slot2&&draggingItem.id!==state.slot1.id){state.slot2=draggingItem;sndDrop();addRipple(x,y);tryFuse()}
+  else if(!state.slot2&&draggingItem.id===state.slot1.id){sndDrop();addRipple(x,y)}
+}
+function tryFuse(){
+  if(state.slot1&&state.slot2&&!state.fusing){
+    state.fusing=true;state.fuseT=0;
+    sndFuse();
+    state.glow=1;
+    // particles
+    const c=getCircle();
+    for(let i=0;i<30;i++){
+      const a=Math.random()*Math.PI*2,sp=2+Math.random()*6;
+      state.particles.push({x:c.cx,y:c.cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1,color:`hsl(${Math.random()*360},80%,60%)`,size:3+Math.random()*5});
+    }
+    setTimeout(()=>{
+      const res=generateFusion(state.slot1,state.slot2);
+      state.result=res;
+      state.album.unshift(res);
+      if(state.album.length>200)state.album.pop();
+      checkUnlocks();
+      save();
+      showResult(res);
+      sndPop();
+      state.fusing=false;state.slot1=null;state.slot2=null;
+    },2000);
+  }
+}
+function checkUnlocks(){
+  const unique=new Set(state.album.map(r=>r.ra+'+'+r.rb));
+  const n=unique.size;
+  const unlocks={5:'flower',10:'umbrella',20:'robot'};
+  Object.keys(unlocks).forEach(k=>{
+    if(n>=+k&&!state.unlocked.includes(unlocks[k])){
+      state.unlocked.push(unlocks[k]);
+      sndUnlock();
+      toast('🎉 解锁新物品：'+itemMap[unlocks[k]].name);
+    }
+  });
+  // rare: diamond, crown
+  const rareCount=state.album.filter(r=>r.fun>=8).length;
+  if(rareCount>=3&&!state.unlocked.includes('diamond')){state.unlocked.push('diamond');sndUnlock();toast('💎 稀有解锁：钻石！')}
+  if(rareCount>=6&&!state.unlocked.includes('crown')){state.unlocked.push('crown');sndUnlock();toast('👑 稀有解锁：皇冠！')}
+  renderPool();
+}
+
+// ===== particles & ripples =====
+function addRipple(x,y){state.ripples.push({x,y,r:5,max:80,life:1})}
+function updateFx(){
+  state.particles=state.particles.filter(p=>p.life>0);
+  state.particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=.15;p.life-=.025;p.vx*=.98});
+  state.ripples=state.ripples.filter(r=>r.life>0);
+  state.ripples.forEach(r=>{r.r+=(r.max-r.r)*0.15;r.life-=.05});
+  state.glow*=.96;
+  if(state.fusing)state.fuseT++;
+}
+
+// ===== Render =====
+function render(){
+  const w=innerWidth,h=innerHeight;
+  // bg
+  const g=ctx.createLinearGradient(0,0,0,h);
+  g.addColorStop(0,'#1a1a2e');g.addColorStop(1,'#16213e');
+  ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
+  
+  updateFx();
+  
+  // ripples
+  state.ripples.forEach(r=>{
+    ctx.strokeStyle=`rgba(255,107,157,${r.life*0.5})`;ctx.lineWidth=3;
+    ctx.beginPath();ctx.arc(r.x,r.y,r.r,0,Math.PI*2);ctx.stroke();
+  });
+  
+  const c=getCircle();
+  
+  // fusion glow
+  if(state.glow>0.05||state.fusing){
+    const glowR=c.r*(1.5+state.glow*1.5+Math.sin(state.fuseT*0.3)*0.3);
+    const grad=ctx.createRadialGradient(c.cx,c.cy,0,c.cx,c.cy,glowR);
+    grad.addColorStop(0,`rgba(255,217,61,${0.5*state.glow})`);
+    grad.addColorStop(0.5,`rgba(255,107,157,${0.3*state.glow})`);
+    grad.addColorStop(1,'rgba(168,85,247,0)');
+    ctx.fillStyle=grad;ctx.beginPath();ctx.arc(c.cx,c.cy,glowR,0,Math.PI*2);ctx.fill();
+  }
+  
+  // fusion circle
+  ctx.strokeStyle=state.fusing?'#ffd93d':'rgba(255,255,255,0.3)';
+  ctx.lineWidth=state.fusing?4:3;
+  ctx.setLineDash(state.fusing?[]:[8,6]);
+  ctx.beginPath();ctx.arc(c.cx,c.cy,c.r,0,Math.PI*2);ctx.stroke();
+  ctx.setLineDash([]);
+  
+  // center text
+  if(!state.slot1&&!state.slot2){
+    ctx.fillStyle='rgba(255,255,255,0.4)';ctx.font='14px monospace';ctx.textAlign='center';
+    ctx.fillText('拖两个物品进来',c.cx,c.cy);
+  }
+  
+  // slots
+  if(state.slot1){
+    ctx.font=(c.r*0.7)+'px serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    const off=state.fusing?Math.sin(state.fuseT*0.5)*15:0;
+    ctx.fillText(state.slot1.emoji,c.cx-c.r*0.4+off,c.cy);
+  }
+  if(state.slot2){
+    ctx.font=(c.r*0.7)+'px serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    const off=state.fusing?Math.sin(state.fuseT*0.5+Math.PI)*15:0;
+    ctx.fillText(state.slot2.emoji,c.cx+c.r*0.4+off,c.cy);
+  }
+  if(state.fusing){
+    // plus sign
+    ctx.fillStyle='#ffd93d';ctx.font=(c.r*0.5)+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText('+',c.cx,c.cy);
+    // progress ring
+    const pct=state.fuseT/120;
+    ctx.strokeStyle='#ff6b9d';ctx.lineWidth=5;
+    ctx.beginPath();ctx.arc(c.cx,c.cy,c.r+10,-Math.PI/2,-Math.PI/2+pct*Math.PI*2);ctx.stroke();
+  }
+  
+  // particles
+  state.particles.forEach(p=>{
+    ctx.globalAlpha=p.life;ctx.fillStyle=p.color;
+    ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,Math.PI*2);ctx.fill();
+  });
+  ctx.globalAlpha=1;
+  
+  requestAnimationFrame(render);
+}
+render();
+renderPool();
+
+// ===== Result popup =====
+const popup=document.getElementById('result-popup');
+function showResult(r){
+  document.getElementById('result-emoji').textContent=r.emoji;
+  document.getElementById('result-name').textContent=r.name;
+  document.getElementById('result-desc').textContent=r.desc;
+  popup.classList.add('show');
+}
+document.getElementById('res-close').onclick=()=>popup.classList.remove('show');
+document.getElementById('res-copy').onclick=()=>{
+  const r=state.result;if(!r)return;
+  const txt=`🧬 ${r.emoji} ${r.name}\n${r.desc}\n融合配方：${itemMap[r.ra].name} + ${itemMap[r.rb].name}\n#EverythingFusion`;
+  navigator.clipboard.writeText(txt).then(()=>toast('📋 已复制到剪贴板')).catch(()=>{
+    const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();toast('📋 已复制');
+  });
+};
+
+// ===== Album =====
+const albumModal=document.getElementById('album-modal');
+function renderAlbum(){
+  const list=document.getElementById('recipe-list');
+  let arr=[...state.album];
+  if(state.sort==='fun')arr.sort((a,b)=>b.fun-a.fun);
+  if(arr.length===0){list.innerHTML='<div style="color:#888;text-align:center;padding:30px">还没有融合配方<br>快去试试吧！</div>';return}
+  list.innerHTML=arr.map(r=>`
+    <div class="recipe-card" data-time="${r.time}">
+      <div class="recipe-top">
+        <span class="recipe-emoji">${r.emoji}</span>
+        <div>
+          <div class="recipe-name">${r.name}</div>
+          <div class="recipe-meta"><span>${itemMap[r.ra]?.name||'?'} + ${itemMap[r.rb]?.name||'?'}</span><span>有趣度 ${r.fun}/10</span></div>
+        </div>
+      </div>
+      <div class="recipe-desc">${r.desc}</div>
+      ${r.note?`<div class="recipe-note">📝 ${r.note}</div>`:''}
+    </div>
+  `).join('');
+  // long press to add note
+  list.querySelectorAll('.recipe-card').forEach(card=>{
+    let t;
+    const time=+card.dataset.time;
+    card.addEventListener('touchstart',()=>{t=setTimeout(()=>{
+      const r=state.album.find(x=>x.time===time);if(!r)return;
+      const note=prompt('给这个配方添加注释：',r.note||'');
+      if(note!==null){r.note=note;save();renderAlbum();toast('📝 已添加注释')}
+    },600)},{passive:true});
+    card.addEventListener('touchend',()=>clearTimeout(t));
+    card.addEventListener('touchmove',()=>clearTimeout(t));
+    card.addEventListener('mousedown',()=>{t=setTimeout(()=>{
+      const r=state.album.find(x=>x.time===time);if(!r)return;
+      const note=prompt('给这个配方添加注释：',r.note||'');
+      if(note!==null){r.note=note;save();renderAlbum();toast('📝 已添加注释')}
+    },600)});
+    card.addEventListener('mouseup',()=>clearTimeout(t));
+    card.addEventListener('mouseleave',()=>clearTimeout(t));
+  });
+}
+document.getElementById('btn-album').onclick=()=>{renderAlbum();albumModal.classList.add('show')};
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>document.getElementById(b.dataset.close+'-modal').classList.remove('show'));
+document.querySelectorAll('.sort-btn[data-sort]').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.sort-btn[data-sort]').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');state.sort=b.dataset.sort;renderAlbum();
+});
+document.getElementById('btn-backup').onclick=()=>{
+  const data={album:state.album,unlocked:state.unlocked};
+  const blob=new Blob([JSON.stringify(data)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='fusion-backup.json';a.click();
+  toast('💾 备份已下载');
+};
+document.getElementById('btn-restore').onclick=()=>{
+  const inp=document.createElement('input');inp.type='file';inp.accept='.json';
+  inp.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{
+    try{const d=JSON.parse(r.result);state.album=d.album||[];state.unlocked=d.unlocked||state.unlocked;save();renderPool();renderAlbum();toast('♻️ 还原成功')}catch(err){toast('❌ 文件格式错误')}
+  };r.readAsText(f)};inp.click();
+};
+
+// ===== Detail =====
+function showDetail(it){
+  document.getElementById('detail-emoji').textContent=it.emoji;
+  document.getElementById('detail-name').textContent=it.name;
+  document.getElementById('detail-desc').textContent=it.desc;
+  document.getElementById('detail-rarity').textContent=it.locked?'🔒 稀有物品':'基础物品';
+  document.getElementById('detail-title').textContent='物品详情';
+  document.getElementById('detail-modal').classList.add('show');
+}
+
+// ===== Reset =====
+document.getElementById('btn-reset').onclick=()=>{
+  if(confirm('重置融合圈？')){state.slot1=null;state.slot2=null;state.fusing=false;toast('🔄 融合圈已清空')}
+};
+
+// ===== Share float =====
+document.getElementById('share-float').onclick=()=>{
+  if(state.album.length===0){toast('还没有融合可以分享');return}
+  const r=state.album[0];
+  const txt=`🧬 ${r.emoji} ${r.name}\n${r.desc}\n${itemMap[r.ra]?.name} + ${itemMap[r.rb]?.name} = ${r.name}\n有趣度 ${r.fun}/10\n#EverythingFusion #BrainwaveMix`;
+  navigator.clipboard.writeText(txt).then(()=>toast('📋 融合配方已复制')).catch(()=>toast('复制失败'));
+};
+
+// ===== Toast =====
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove('show'),1800)}
+
+// ===== Tutorial =====
+const tutSteps=[
+  {big:'👆',text:'从底部物品池<br>拖动一个物品到中心融合圈'},
+  {big:'➕',text:'再拖一个不同的物品<br>等2秒，见证融合奇迹！'},
+  {big:'📖',text:'点击右上角相册<br>查看所有融合配方<br>长按可添加注释'},
+];
+let tutIdx=0;
+const tutModal=document.getElementById('tut-modal');
+const tutStep=document.getElementById('tut-step');
+function updateTut(){
+  const s=tutSteps[tutIdx];
+  tutStep.innerHTML=`<span class="big">${s.big}</span><div>${s.text}</div><button class="tut-btn" id="tut-next">${tutIdx<tutSteps.length-1?'下一步':'开始融合！'}</button>`;
+  document.getElementById('tut-next').onclick=()=>{
+    tutIdx++;
+    if(tutIdx>=tutSteps.length){tutModal.classList.remove('show');localStorage.setItem('efw_tut','1')}
+    else updateTut();
+  };
+}
+if(localStorage.getItem('efw_tut'))tutModal.classList.remove('show');
+updateTut();
+
+// mouse support for drag ghost
+document.addEventListener('mousemove',e=>{if(draggingItem){dragGhost.style.left=e.clientX+'px';dragGhost.style.top=e.clientY+'px'}});
+document.addEventListener('mouseup',e=>{if(draggingItem){handleDrop(e.clientX,e.clientY);dragGhost.style.display='none';draggingItem=null}});
+
+})();
+</script>
+</body>
+</html>
