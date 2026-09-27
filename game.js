@@ -718,10 +718,13 @@
     holdFired: false,
     pointer: null,
     rafId: null,
-    swirls: []             // 活跃的旋涡效果 [{cx,cy,radius,angle,start,duration}]
+    swirls: [],            // 活跃的旋涡效果
+    particles: [],         // 粒子爆发 [{x,y,vx,vy,life,maxLife,color,size}]
+    rings: []              // 闪光环扩散 [{x,y,radius,life,maxLife,color}]
   };
 
   const MAX_SWIRLS = 4;
+  const MAX_PARTICLES = 80;
   // 旋涡扭曲（像素级，合并所有旋涡到一次 getImageData/putImageData）
   function applySwirls() {
     if (!state.swirls.length) return;
@@ -821,6 +824,75 @@
       renderNormal(W, H);
       // 普通模式下叠加旋涡扭曲（像素级）
       if (state.swirls.length) applySwirls();
+    }
+    // 粒子 + 闪光环（所有模式都叠加）
+    drawEffects(W, H);
+  }
+
+  // 生成粒子爆发
+  function spawnParticles(cx, cy, count, colors) {
+    if (state.particles.length > MAX_PARTICLES) return;
+    const palette = colors || ['#FFD400', '#FF5CA8', '#00BFFF', '#7CFC00', '#FF4500', '#fff'];
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const speed = 2 + Math.random() * 6;
+      state.particles.push({
+        x: cx, y: cy,
+        vx: Math.cos(a) * speed,
+        vy: Math.sin(a) * speed - 2,
+        life: 1,
+        maxLife: 0.6 + Math.random() * 0.5,
+        color: palette[Math.floor(Math.random() * palette.length)],
+        size: 3 + Math.random() * 5
+      });
+    }
+  }
+
+  // 生成闪光环
+  function spawnRing(cx, cy, color) {
+    state.rings.push({
+      x: cx, y: cy, radius: 5, life: 1, maxLife: 0.6,
+      color: color || '#FFD400'
+    });
+  }
+
+  // 绘制粒子 + 闪光环
+  function drawEffects(W, H) {
+    const now = performance.now();
+    // 更新并绘制粒子
+    if (state.particles.length) {
+      state.particles = state.particles.filter(p => p.life > 0);
+      state.particles.forEach(p => {
+        p.life -= 0.016 / p.maxLife;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.25;       // 重力
+        p.vx *= 0.96;        // 空气阻力
+        if (p.life <= 0) return;
+        ctx.globalAlpha = Math.max(0, p.life);
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+    }
+    // 更新并绘制闪光环
+    if (state.rings.length) {
+      state.rings = state.rings.filter(r => r.life > 0);
+      state.rings.forEach(r => {
+        r.life -= 0.016 / r.maxLife;
+        r.radius += 8;
+        if (r.life <= 0) return;
+        ctx.globalAlpha = Math.max(0, r.life * 0.8);
+        ctx.strokeStyle = r.color;
+        ctx.lineWidth = 4 * r.life;
+        ctx.beginPath();
+        ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
+        ctx.stroke();
+      });
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = 1;
     }
   }
 
@@ -938,7 +1010,7 @@
 
   // 动画循环：有任何动画（glitch / swirls / dist）时重绘，由 loop 统一驱动，避免重复 render
   function hasAnim() {
-    if (state.glitch || state.swirls.length) return true;
+    if (state.glitch || state.swirls.length || state.particles.length || state.rings.length) return true;
     for (const k in state.dist) if (state.dist[k] > 0.001) return true;
     return false;
   }
@@ -974,38 +1046,45 @@
       if (char.features.length) feat = char.features[0];
       else return;
     }
-    // 过冲弹跳：立即跳到 1.25，然后弹性回落到 0
-    state.dist[feat.id] = 1.25;
+    // 过冲弹跳：立即跳到 1.6（更强），然后弹性回落到 0
+    state.dist[feat.id] = 1.6;
     clearTimeout(state.distTimers[feat.id]);
     const start = performance.now();
-    const dur = 380;
+    const dur = 420;
     function step(now) {
       const t = Math.min(1, (now - start) / dur);
       let v;
-      if (t < 0.7) {
-        v = 1.25 * (1 - t / 0.7);
+      if (t < 0.65) {
+        v = 1.6 * (1 - t / 0.65);
       } else {
-        const u = (t - 0.7) / 0.3;
-        v = -0.2 * Math.sin(u * Math.PI);
+        const u = (t - 0.65) / 0.35;
+        v = -0.3 * Math.sin(u * Math.PI);
       }
       state.dist[feat.id] = Math.max(0, v);
-      // 不直接 render()，由 loop 统一驱动
       if (t < 1) requestAnimationFrame(step);
       else state.dist[feat.id] = 0;
     }
     requestAnimationFrame(step);
-    // 添加旋涡扭曲（像素级吸入效果）
+    // 旋涡扭曲（更强：角度 5π，半径加大）
     const r = canvas.getBoundingClientRect();
     const cx = (px != null ? px : feat.x) * r.width;
     const cy = (py != null ? py : feat.y) * r.height;
-    const radius = Math.max(feat.w, feat.h) * r.width * 1.3;
+    const radius = Math.max(feat.w, feat.h) * r.width * 1.6;
     if (state.swirls.length >= MAX_SWIRLS) state.swirls.shift();
     state.swirls.push({
       cx, cy, radius,
-      angle: Math.PI * 3,
+      angle: Math.PI * 5,
       start: performance.now(),
-      duration: 480
+      duration: 520
     });
+    // 粒子爆发
+    spawnParticles(cx, cy, 18);
+    // 闪光环
+    spawnRing(cx, cy);
+    spawnRing(cx + 10, cy + 5, '#FF5CA8');
+    // 屏幕抖动
+    const app = document.getElementById('app');
+    app.classList.remove('shake'); void app.offsetWidth; app.classList.add('shake');
     AudioEngine.sfx(CHARS[state.charIdx].sound);
   }
 
@@ -1028,30 +1107,34 @@
     }, 3000);
   }
 
-  // 拖动时的持续效果：在当前位置产生小旋涡 + 扭曲附近特征
+  // 拖动时的持续效果：在当前位置产生小旋涡 + 扭曲附近特征 + 拖尾粒子
   function dragEffect(e) {
     const p = canvasPoint(e);
     if (state.glitch) {
       if (state.pointer.fxCount % 3 === 0) AudioEngine.sfx('pop');
       return;
     }
-    // 小旋涡（力度比点击轻），限制同时活跃数量
     const r = canvas.getBoundingClientRect();
+    const cx = p.x * r.width, cy = p.y * r.height;
+    // 旋涡（力度加强）
     if (state.swirls.length >= MAX_SWIRLS) state.swirls.shift();
     state.swirls.push({
-      cx: p.x * r.width, cy: p.y * r.height,
-      radius: r.width * 0.12,
-      angle: Math.PI * 1.5,
+      cx, cy,
+      radius: r.width * 0.15,
+      angle: Math.PI * 2.5,
       start: performance.now(),
-      duration: 400
+      duration: 420
     });
-    // 扭曲最近的特征（力度较轻，会回弹）
+    // 扭曲最近的特征（力度加强到 1.0）
     const feat = hitFeature(p.x, p.y);
-    if (feat && state.pointer.fxCount % 2 === 0) {
-      springBack(feat.id, 0.6);
+    if (feat) {
+      springBack(feat.id, 1.0);
     }
+    // 拖尾粒子（少量，不抢戏）
+    spawnParticles(cx, cy, 5);
+    // 偶尔闪光环
+    if (state.pointer.fxCount % 3 === 0) spawnRing(cx, cy, '#00BFFF');
     if (state.pointer.fxCount % 4 === 0) AudioEngine.sfx('pop');
-    // 不直接 render()，由 loop 统一驱动
   }
 
   // 弹性回弹工具：把 featId 的扭曲值设为 strength，然后弹性回落到 0
