@@ -470,7 +470,7 @@ function render(){
 render();
 renderPool();
 
-// ===== Fusion Visual: merge both items into ONE unified entity =====
+// ===== Fusion Visual: split-merge into ONE chimera (clip-based, reliable) =====
 function drawFusionVisual(canvas, emojiA, emojiB) {
   const ctx = canvas.getContext('2d');
   const S = 340;
@@ -490,7 +490,7 @@ function drawFusionVisual(canvas, emojiA, emojiB) {
   ctx.fillStyle = grad;
   ctx.beginPath(); ctx.arc(cx, cy, S * 0.5, 0, Math.PI * 2); ctx.fill();
 
-  // rotating sparkle ring (Halloween colors)
+  // rotating sparkle ring
   for (let i = 0; i < 10; i++) {
     const ang = t * 0.8 + (i / 10) * Math.PI * 2;
     const r = S * 0.42;
@@ -501,61 +501,66 @@ function drawFusionVisual(canvas, emojiA, emojiB) {
     ctx.beginPath(); ctx.arc(sx, sy, 2 + Math.sin(t * 4 + i) * 1.5, 0, Math.PI * 2); ctx.fill();
   }
 
-  // === MERGE INTO ONE: both emojis at same center, same size, blended ===
-  const baseSize = S * 0.55;
-  // gentle pulsing so the merged entity breathes as one
-  const pulse = 1 + Math.sin(t * 2) * 0.04;
-  const fontSize = baseSize * pulse;
+  // === Chimera: left half = A, right half = B, soft blended middle ===
+  const pulse = 1 + Math.sin(t * 2) * 0.035;
+  const fontSize = S * 0.62 * pulse;
+  const drawEmoji = (e, alpha) => {
+    ctx.globalAlpha = alpha;
+    ctx.font = `${fontSize}px serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 12;
+    ctx.fillText(e, cx, cy);
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+  };
 
-  // Draw item A — the body
+  const leftEdge = S * 0.38;   // A fully opaque left of this
+  const rightEdge = S * 0.62;  // B fully opaque right of this
+
+  // 1) Left zone: draw A (clipped to left 42%)
   ctx.save();
-  ctx.font = `${fontSize}px serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 12;
-  ctx.fillText(emojiA, cx, cy);
-  ctx.shadowBlur = 0;
+  ctx.beginPath(); ctx.rect(0, 0, leftEdge, S); ctx.clip();
+  drawEmoji(emojiA, 1);
   ctx.restore();
 
-  // Draw item B at the SAME center & size, 'screen' blend → merges into A as one shape
+  // 2) Middle blend zone (38%-62%): draw A at fading alpha + B at rising alpha
+  //    We approximate the soft gradient with a few sub-strips for smoothness
+  const strips = 8;
+  for (let i = 0; i < strips; i++) {
+    const x0 = leftEdge + (rightEdge - leftEdge) * (i / strips);
+    const x1 = leftEdge + (rightEdge - leftEdge) * ((i + 1) / strips);
+    const mid = (x0 + x1) / 2 / S;
+    const aAlpha = 1 - (mid - 0.38) / 0.24;   // A fades 1→0 across middle
+    const bAlpha = (mid - 0.38) / 0.24;       // B rises 0→1 across middle
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x0, 0, x1 - x0, S); ctx.clip();
+    drawEmoji(emojiA, Math.max(0, aAlpha));
+    drawEmoji(emojiB, Math.max(0, bAlpha));
+    ctx.restore();
+  }
+
+  // 3) Right zone: draw B (clipped to right 42%)
   ctx.save();
-  ctx.globalCompositeOperation = 'screen';
-  ctx.globalAlpha = 0.85;
-  ctx.font = `${fontSize}px serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  // tiny rotation so features interleave (not identical overlap)
-  ctx.translate(cx, cy);
-  ctx.rotate(Math.sin(t * 1.5) * 0.06);
-  ctx.shadowColor = 'rgba(255,200,80,0.95)'; ctx.shadowBlur = 20;
-  ctx.fillText(emojiB, 0, 0);
+  ctx.beginPath(); ctx.rect(rightEdge, 0, S - rightEdge, S); ctx.clip();
+  drawEmoji(emojiB, 1);
   ctx.restore();
 
-  // Third pass: 'lighten' overlay of B at center to deepen the merge
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighten';
-  ctx.globalAlpha = 0.4;
-  ctx.font = `${fontSize * 0.9}px serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(emojiB, cx, cy);
-  ctx.restore();
+  // soft golden seam glow down the middle
+  const seam = ctx.createLinearGradient(cx - S * 0.05, 0, cx + S * 0.05, 0);
+  seam.addColorStop(0, 'rgba(255,215,0,0)');
+  seam.addColorStop(0.5, `rgba(255,215,0,${0.3 + Math.sin(t * 3) * 0.12})`);
+  seam.addColorStop(1, 'rgba(255,215,0,0)');
+  ctx.fillStyle = seam;
+  ctx.fillRect(cx - S * 0.05, cy - S * 0.42, S * 0.1, S * 0.84);
 
-  // Unified pulsing aura around the merged entity (treats it as ONE)
+  // unified pulsing aura
   const auraR = S * 0.34 + Math.sin(t * 2.5) * 6;
-  const aura = ctx.createRadialGradient(cx, cy, S * 0.15, cx, cy, auraR);
+  const aura = ctx.createRadialGradient(cx, cy, S * 0.12, cx, cy, auraR);
   aura.addColorStop(0, 'rgba(255,140,0,0)');
-  aura.addColorStop(0.6, `rgba(255,140,0,${0.25 + Math.sin(t * 2) * 0.1})`);
+  aura.addColorStop(0.6, `rgba(255,140,0,${0.22 + Math.sin(t * 2) * 0.08})`);
   aura.addColorStop(1, 'rgba(107,0,182,0)');
   ctx.fillStyle = aura;
   ctx.beginPath(); ctx.arc(cx, cy, auraR, 0, Math.PI * 2); ctx.fill();
-
-  // central fusion sparkle
-  ctx.fillStyle = '#ffd93d';
-  ctx.font = `${S * 0.1}px sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('✦', cx, cy);
 }
 
 let fusionAnimId = null;
